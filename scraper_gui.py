@@ -196,6 +196,11 @@ class GoogleMyBusinessScraperGUI:
                                     font=('Arial', 12, 'bold'), padx=20, state='disabled')
         self.stop_button.pack(side='left', padx=5)
         
+        self.refresh_button = tk.Button(control_frame, text="Reiniciar", 
+                                       command=self.refresh_scraper, bg='#FF9800', fg='white',
+                                       font=('Arial', 12, 'bold'), padx=20)
+        self.refresh_button.pack(side='left', padx=5)
+        
         # Área de log
         log_frame = ttk.LabelFrame(self.scraping_frame, text="Registro de Actividad", padding=5)
         log_frame.pack(fill='both', expand=True, padx=10, pady=5)
@@ -442,6 +447,35 @@ class GoogleMyBusinessScraperGUI:
         self.stop_button.config(state='disabled')
         self.progress_var.set("Detenido por el usuario")
         self.log("🛑 Scraping detenido por el usuario")
+    
+    def refresh_scraper(self):
+        """Reinicia el estado del scraper y limpia la interfaz"""
+        # Detener cualquier scraping en progreso
+        if self.is_scraping:
+            self.stop_scraping()
+        
+        # Limpiar log
+        self.log_text.delete(1.0, tk.END)
+        
+        # Reiniciar barra de progreso
+        self.progress_bar['value'] = 0
+        self.progress_var.set("Listo para comenzar")
+        
+        # Limpiar datos scrapeados
+        self.scraped_data = []
+        
+        # Reiniciar estado de botones
+        self.start_button.config(state='normal')
+        self.stop_button.config(state='disabled')
+        
+        # Actualizar lista de archivos
+        self.refresh_json_files()
+        
+        # Limpiar vista previa
+        self.preview_text.delete(1.0, tk.END)
+        
+        # Log de reinicio
+        self.log("🔄 Aplicación reiniciada - Lista para nuevo scraping")
         
     def search_businesses(self, business_name: str) -> List[Dict]:
         """Busca múltiples negocios y retorna lista de place_ids con nombres"""
@@ -643,7 +677,9 @@ class GoogleMyBusinessScraperGUI:
             self.log(f"❌ No se obtuvieron datos para '{keyword}'")
             
         self.progress_var.set(f"Completado: {processed_count} negocios")
-        self.stop_scraping()
+        self.is_scraping = False
+        self.start_button.config(state='normal')
+        self.stop_button.config(state='disabled')
         self.refresh_json_files()
         
     def save_data_to_json(self, filepath):

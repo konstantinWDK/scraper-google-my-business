@@ -476,6 +476,33 @@ class GoogleMyBusinessScraperGUI:
         
         # Log de reinicio
         self.log("🔄 Aplicación reiniciada - Lista para nuevo scraping")
+    
+    def load_existing_place_ids(self, filename, output_format):
+        """Carga place_ids existentes del archivo para evitar duplicados"""
+        filepath = os.path.join('data', filename)
+        existing_place_ids = set()
+        
+        if not os.path.exists(filepath):
+            return existing_place_ids
+        
+        try:
+            if output_format == "csv":
+                with open(filepath, 'r', encoding='utf-8') as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    for row in reader:
+                        if 'place_id' in row and row['place_id']:
+                            existing_place_ids.add(row['place_id'])
+            else:  # JSON
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    for item in data:
+                        if 'place_id' in item and item['place_id']:
+                            existing_place_ids.add(item['place_id'])
+        except (json.JSONDecodeError, IOError, csv.Error) as e:
+            self.log(f"⚠️ Error leyendo archivo existente: {e}")
+            return set()
+        
+        return existing_place_ids
         
     def search_businesses(self, business_name: str) -> List[Dict]:
         """Busca múltiples negocios y retorna lista de place_ids con nombres"""
@@ -581,6 +608,11 @@ class GoogleMyBusinessScraperGUI:
     def scrape_data(self, keyword, filename, output_format="json"):
         self.log(f"🔍 Iniciando scraping para: {keyword}")
         
+        # Cargar place_ids ya existentes para evitar duplicados
+        existing_place_ids = self.load_existing_place_ids(filename, output_format)
+        if existing_place_ids:
+            self.log(f"📋 Se encontraron {len(existing_place_ids)} registros existentes en el archivo")
+        
         # Verificar límite de resultados
         try:
             limit_str = self.max_results_var.get().strip()
@@ -595,14 +627,28 @@ class GoogleMyBusinessScraperGUI:
         self.progress_var.set("Buscando negocios...")
         
         # Buscar múltiples negocios
-        businesses = self.search_businesses(keyword)
-        if not businesses:
+        all_businesses = self.search_businesses(keyword)
+        if not all_businesses:
             self.log(f"❌ No se encontraron negocios para '{keyword}'")
             self.progress_var.set("No se encontraron resultados")
             self.stop_scraping()
             return
+        
+        # Filtrar duplicados basándose en place_id
+        businesses = [b for b in all_businesses if b['place_id'] not in existing_place_ids]
+        duplicates_found = len(all_businesses) - len(businesses)
+        
+        if duplicates_found > 0:
+            self.log(f"🔄 Se omitieron {duplicates_found} duplicados ya existentes")
+        
+        if not businesses:
+            self.log(f"ℹ️ Todos los negocios encontrados ya existen en el archivo")
+            self.progress_var.set("No hay nuevos resultados")
+            self.stop_scraping()
+            return
             
-        self.log(f"📋 Se encontraron {len(businesses)} negocios")
+        self.log(f"📋 Se encontraron {len(all_businesses)} negocios totales")
+        self.log(f"✨ {len(businesses)} negocios nuevos para procesar")
         self.progress_bar.config(maximum=len(businesses))
         self.progress_bar['value'] = 0
         
@@ -664,17 +710,20 @@ class GoogleMyBusinessScraperGUI:
                 time.sleep(batch_delay)
                 batch_count = 0
         
-        # Guardar todos los datos
+        # Guardar todos los datos (combinando con existentes)
         if self.scraped_data:
             filepath = os.path.join('data', filename)
             if output_format == "csv":
-                self.save_data_to_csv(filepath)
+                self.save_data_to_csv(filepath, merge_with_existing=True)
             else:
-                self.save_data_to_json(filepath)
+                self.save_data_to_json(filepath, merge_with_existing=True)
+            
+            total_in_file = len(existing_place_ids) + processed_count
             self.log(f"💾 Datos guardados en: data/{filename}")
-            self.log(f"🏁 Completado: {processed_count} negocios procesados de {len(businesses)} encontrados")
+            self.log(f"🏁 Completado: {processed_count} negocios nuevos procesados")
+            self.log(f"📊 Total en archivo: {total_in_file} negocios")
         else:
-            self.log(f"❌ No se obtuvieron datos para '{keyword}'")
+            self.log(f"❌ No se obtuvieron nuevos datos para '{keyword}'")
             
         self.progress_var.set(f"Completado: {processed_count} negocios")
         self.is_scraping = False
@@ -682,11 +731,21 @@ class GoogleMyBusinessScraperGUI:
         self.stop_button.config(state='disabled')
         self.refresh_json_files()
         
-    def save_data_to_json(self, filepath):
+    def save_data_to_json(self, filepath, merge_with_existing=False):
         # Asegurar que el directorio data existe
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         
         json_data = []
+        
+        # Si merge_with_existing=True, cargar datos existentes primero
+        if merge_with_existing and os.path.exists(filepath):
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    json_data = json.load(f)
+            except (json.JSONDecodeError, IOError):
+                json_data = []
+        
+        # Agregar nuevos datos
         for business in self.scraped_data:
             data_dict = {}
             
@@ -715,12 +774,9 @@ class GoogleMyBusinessScraperGUI:
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(json_data, f, ensure_ascii=False, indent=2)
     
-    def save_data_to_csv(self, filepath):
+    def save_data_to_csv(self, filepath, merge_with_existing=False):
         # Asegurar que el directorio data existe
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        
-        if not self.scraped_data:
-            return
         
         # Crear lista de campos seleccionados
         fieldnames = []
@@ -740,34 +796,46 @@ class GoogleMyBusinessScraperGUI:
             if self.field_vars[field].get():
                 fieldnames.append(csv_name)
         
-        # Escribir archivo CSV
-        with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
+        # Preparar nuevas filas
+        new_rows = []
+        for business in self.scraped_data:
+            row = {}
             
-            for business in self.scraped_data:
-                row = {}
-                
-                if self.field_vars['title'].get():
-                    row['titulo'] = business.title or ''
-                if self.field_vars['phone'].get() and business.phone:
-                    row['telefono'] = business.phone
-                if self.field_vars['website'].get() and business.website:
-                    row['sitio_web'] = business.website
-                if self.field_vars['address'].get() and business.address:
-                    row['direccion'] = business.address
-                if self.field_vars['place_id'].get() and business.place_id:
-                    row['place_id'] = business.place_id
-                if self.field_vars['rating'].get() and business.rating:
-                    row['rating'] = business.rating
-                if self.field_vars['total_ratings'].get() and business.total_ratings:
-                    row['total_ratings'] = business.total_ratings
-                if self.field_vars['opening_hours'].get() and business.opening_hours:
-                    row['horarios'] = business.opening_hours
-                if self.field_vars['price_level'].get() and business.price_level:
-                    row['nivel_precios'] = business.price_level
-                
-                writer.writerow(row)
+            if self.field_vars['title'].get():
+                row['titulo'] = business.title or ''
+            if self.field_vars['phone'].get() and business.phone:
+                row['telefono'] = business.phone
+            if self.field_vars['website'].get() and business.website:
+                row['sitio_web'] = business.website
+            if self.field_vars['address'].get() and business.address:
+                row['direccion'] = business.address
+            if self.field_vars['place_id'].get() and business.place_id:
+                row['place_id'] = business.place_id
+            if self.field_vars['rating'].get() and business.rating:
+                row['rating'] = business.rating
+            if self.field_vars['total_ratings'].get() and business.total_ratings:
+                row['total_ratings'] = business.total_ratings
+            if self.field_vars['opening_hours'].get() and business.opening_hours:
+                row['horarios'] = business.opening_hours
+            if self.field_vars['price_level'].get() and business.price_level:
+                row['nivel_precios'] = business.price_level
+            
+            new_rows.append(row)
+        
+        # Si merge_with_existing=True y el archivo existe, anexar datos
+        if merge_with_existing and os.path.exists(filepath):
+            # Anexar al archivo existente
+            with open(filepath, 'a', newline='', encoding='utf-8') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                for row in new_rows:
+                    writer.writerow(row)
+        else:
+            # Escribir archivo CSV nuevo
+            with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                for row in new_rows:
+                    writer.writerow(row)
 
 def main():
     # Cambiar al directorio del script

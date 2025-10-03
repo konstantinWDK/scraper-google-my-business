@@ -5,10 +5,14 @@ Extrae datos de perfiles de Google My Business utilizando la API de Google Place
 ## 🎯 Características
 
 - **Interfaz gráfica intuitiva** con pestañas organizadas
+- **Múltiples formatos de salida**: JSON y CSV a elección
+- **Detección automática de duplicados**: Evita scraping redundante comparando place_ids
+- **Scraping incremental**: Continúa desde donde lo dejaste sin duplicar datos
 - **Múltiples resultados**: Extrae todos los negocios disponibles o limita la cantidad
 - **Campos configurables**: Elige qué datos extraer (teléfono, sitio web, dirección, etc.)
 - **Control de velocidad**: Evita límites de API con delays configurables
-- **Gestión de archivos**: Ve, elimina y exporta archivos JSON
+- **Gestión de archivos**: Ve, elimina y exporta archivos JSON y CSV
+- **Botón de reinicio**: Limpia la interfaz para empezar fresco
 - **Seguridad mejorada**: Soporte para variables de entorno
 
 ## 📊 Datos Extraídos
@@ -23,7 +27,34 @@ Extrae datos de perfiles de Google My Business utilizando la API de Google Place
 - 🕒 **Horarios**: Horarios de apertura (opcional)
 - 💰 **Nivel de Precios**: Escala de precios (opcional)
 
-## 🔐 Configuración de API Key (SEGURA)
+## 🔐 Obtener y Configurar Google Places API Key
+
+### 📋 Paso 1: Crear API Key de Google Places
+
+1. **Ve a Google Cloud Console**: [console.cloud.google.com](https://console.cloud.google.com)
+2. **Crea un proyecto nuevo** o selecciona uno existente
+3. **Habilita la API**:
+   - Ve a "APIs y servicios" → "Biblioteca"
+   - Busca "Places API" y habilítala
+   - También habilita "Geocoding API" (recomendado)
+4. **Crear credenciales**:
+   - Ve a "APIs y servicios" → "Credenciales"
+   - Clic en "Crear credenciales" → "Clave de API"
+   - Copia tu API key generada
+5. **Configurar restricciones** (recomendado):
+   - Clic en tu API key para editarla
+   - En "Restricciones de API", selecciona "Restringir clave"
+   - Marca: "Places API" y "Geocoding API"
+   - Guarda los cambios
+
+### 💳 Información de Facturación
+
+- **Costo aproximado**: $0.017 por búsqueda + $0.004 por detalle
+- **Crédito gratuito**: $200/mes (suficiente para ~10,000 búsquedas)
+- **Ejemplo**: 100 negocios ≈ $2.10 USD
+- **Configura límites** en Google Cloud para evitar cargos inesperados
+
+### 🔐 Configuración Segura de API Key
 
 ### Opción 1: Variable de Entorno (Recomendado)
 ```bash
@@ -48,6 +79,12 @@ nano google_api_key.txt
 echo "GOOGLE_PLACES_API_KEY=tu_api_key_aqui" > .env
 ```
 
+### ⚠️ Importante sobre Seguridad
+- **Nunca commitees** tu API key al repositorio
+- **Usa restricciones** de IP o dominio en Google Cloud
+- **Configura límites** de gasto diario/mensual
+- **Monitorea el uso** regularmente en Google Cloud Console
+
 ## 🚀 Instalación y Uso
 
 ### Requisitos
@@ -67,18 +104,28 @@ python3 scraper_gui.py
 
 ## 🎮 Cómo Usar la Interfaz
 
+### 🔄 Botón Reiniciar
+El botón **"Reiniciar"** (naranja) te permite:
+- Detener cualquier scraping en progreso
+- Limpiar el log de actividad
+- Reiniciar la barra de progreso
+- Preparar la interfaz para un nuevo scraping
+- Actualizar la lista de archivos
+
 ### Pestaña Scraper
 1. **Palabra clave**: Introduce el término de búsqueda (ej: "museos en madrid")
-2. **Nombre archivo**: Nombre del JSON (opcional, se auto-genera)
-3. **Campos**: Selecciona qué datos extraer
-4. **Configuración API**: Ajusta velocidad y límites
-5. **Máx resultados**: Número máximo (vacío = todos)
+2. **Nombre archivo**: Nombre del archivo (opcional, se auto-genera)
+3. **Formato**: Elige entre JSON o CSV
+4. **Campos**: Selecciona qué datos extraer
+5. **Configuración API**: Ajusta velocidad y límites
+6. **Máx resultados**: Número máximo (vacío = todos)
+7. **Controles**: Iniciar, Detener y Reiniciar scraping
 
 ### Pestaña Gestión de Archivos
-- **Ver archivos**: Lista todos los JSON generados
-- **Vista previa**: Examina el contenido
+- **Ver archivos**: Lista todos los archivos generados (JSON y CSV)
+- **Vista previa**: Examina el contenido (formato tabla para CSV)
 - **Eliminar**: Borra archivos innecesarios
-- **Exportar**: Guarda en otra ubicación
+- **Exportar**: Guarda en otra ubicación manteniendo el formato
 
 ## ⚙️ Configuración de API
 
@@ -139,8 +186,9 @@ scraper-google-my-business/
 - **Máx resultados**: `30`
 - **Campos**: Todos los campos
 
-## 📋 Formato de Salida
+## 📋 Formatos de Salida
 
+### Formato JSON
 Los datos se guardan en `data/nombre-archivo.json`:
 
 ```json
@@ -181,6 +229,34 @@ Los datos se guardan en `data/nombre-archivo.json`:
 ]
 ```
 
+### Formato CSV
+Los datos también se pueden guardar en `data/nombre-archivo.csv`:
+
+```csv
+titulo,telefono,sitio_web,direccion,rating,total_ratings,place_id
+"MACA Contemporary Art Museum of Alicante","965 21 31 56","http://www.maca-alicante.es/","Pl. Sta. María, 3, 03002 Alicante, Spain",4.5,2240,"ChIJrSMK3IIoQg0Rav9ooGbsHMY"
+"Museo de Bellas Artes Gravina","965 14 67 80","https://www.museobbaa.com/","C/ Gravina, 13-15, 03002 Alicante, Spain",4.3,1256,"ChIJBVEFn6KipBIRzU1sb_VhEJQ"
+```
+
+## 🔄 Detección de Duplicados
+
+**El scraper detecta automáticamente duplicados** comparando `place_id` únicos:
+
+- ✅ **Scraping incremental**: Agrega solo negocios nuevos al archivo existente
+- ✅ **Cero duplicados**: Nunca repite un negocio ya procesado
+- ✅ **Información clara**: Muestra cuántos duplicados se omitieron
+- ✅ **Funciona con ambos formatos**: JSON y CSV
+
+### Ejemplo de log con detección de duplicados:
+```
+📋 Se encontraron 15 registros existentes en el archivo
+📋 Se encontraron 25 negocios totales
+🔄 Se omitieron 8 duplicados ya existentes
+✨ 17 negocios nuevos para procesar
+🏁 Completado: 17 negocios nuevos procesados
+📊 Total en archivo: 32 negocios
+```
+
 ## 🏷️ Descripción de Campos
 
 - **titulo**: Nombre oficial del negocio/museo
@@ -189,7 +265,7 @@ Los datos se guardan en `data/nombre-archivo.json`:
 - **direccion**: Dirección completa con código postal y país
 - **rating**: Calificación promedio (1.0 - 5.0)
 - **total_ratings**: Número total de reseñas de usuarios
-- **place_id**: Identificador único de Google Places (opcional)
+- **place_id**: Identificador único de Google Places (usado para detectar duplicados)
 - **horarios**: Array de horarios semanales en formato string (opcional)
 - **nivel_precios**: Escala de precios 0-4 (0=gratis, 4=muy caro) (opcional)
 
@@ -221,6 +297,12 @@ Los datos se guardan en `data/nombre-archivo.json`:
 
 ### Archivo no se guarda en data/
 **Solución**: La aplicación crea automáticamente la carpeta `data/` y guarda ahí todos los archivos.
+
+### Quiero empezar de cero
+**Solución**: Usa el botón **"Reiniciar"** para limpiar la interfaz y empezar un nuevo scraping desde cero.
+
+### ¿Cómo evitar duplicados?
+**Solución**: El scraper detecta automáticamente duplicados. Solo asegúrate de usar el mismo nombre de archivo para continuar donde lo dejaste.
 
 ## 🔧 Desarrollo
 

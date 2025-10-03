@@ -9,6 +9,7 @@ import requests
 import time 
 import random
 import re
+import webbrowser
 from dataclasses import dataclass
 from typing import List, Optional, Dict
 import unicodedata
@@ -81,6 +82,7 @@ class GoogleMyBusinessScraperGUI:
         
         self.setup_scraping_tab()
         self.setup_files_tab()
+        self.setup_credits_section()
     
     def setup_scraping_tab(self):
         # Título
@@ -919,6 +921,36 @@ class GoogleMyBusinessScraperGUI:
                 writer.writeheader()
                 for row in new_rows:
                     writer.writerow(row)
+
+    def setup_credits_section(self):
+        """Añade sección de créditos en la parte inferior"""
+        credits_frame = tk.Frame(self.root, bg='#f0f0f0', relief='sunken', bd=1)
+        credits_frame.pack(side='bottom', fill='x', padx=5, pady=2)
+        
+        # Texto del creador
+        creator_label = tk.Label(credits_frame, text="Creado por: Konstantin Koshkarev - ", 
+                                font=('Arial', 9), bg='#f0f0f0', fg='#666666')
+        creator_label.pack(side='left', padx=5)
+        
+        # Enlace clickeable
+        link_label = tk.Label(credits_frame, text="webdesignerk.com", 
+                             font=('Arial', 9, 'underline'), bg='#f0f0f0', 
+                             fg='#0066cc', cursor='hand2')
+        link_label.pack(side='left')
+        link_label.bind("<Button-1>", self.open_website)
+        
+        # Cambio de color al hacer hover
+        def on_enter(event):
+            link_label.config(fg='#004499')
+        def on_leave(event):
+            link_label.config(fg='#0066cc')
+            
+        link_label.bind("<Enter>", on_enter)
+        link_label.bind("<Leave>", on_leave)
+    
+    def open_website(self, event):
+        """Abre el sitio web en el navegador predeterminado"""
+        webbrowser.open("https://webdesignerk.com")
 
 def main():
     # Cambiar al directorio del script

@@ -2,6 +2,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, scrolledtext
 import json
+import csv
 import os
 import threading
 import requests
@@ -94,10 +95,16 @@ class GoogleMyBusinessScraperGUI:
         self.keyword_entry.grid(row=0, column=1, columnspan=2, sticky='ew', pady=5)
         
         # Nombre del archivo de salida
-        tk.Label(input_frame, text="Nombre del archivo JSON:").grid(row=1, column=0, sticky='w', pady=5)
+        tk.Label(input_frame, text="Nombre del archivo:").grid(row=1, column=0, sticky='w', pady=5)
         self.filename_entry = tk.Entry(input_frame, width=30, font=('Arial', 10))
         self.filename_entry.grid(row=1, column=1, sticky='ew', pady=5)
-        tk.Label(input_frame, text=".json").grid(row=1, column=2, sticky='w', pady=5)
+        
+        # Formato de salida
+        tk.Label(input_frame, text="Formato:").grid(row=1, column=2, sticky='w', padx=(10,5), pady=5)
+        self.format_var = tk.StringVar(value="json")
+        format_combo = ttk.Combobox(input_frame, textvariable=self.format_var, 
+                                   values=["json", "csv"], state="readonly", width=8)
+        format_combo.grid(row=1, column=3, sticky='w', pady=5)
         
         # Frame para campos a extraer
         fields_frame = ttk.LabelFrame(self.scraping_frame, text="Campos a Extraer", padding=10)
@@ -282,7 +289,7 @@ class GoogleMyBusinessScraperGUI:
             data_dir = 'data'
             if not os.path.exists(data_dir):
                 os.makedirs(data_dir)
-            files = [f for f in os.listdir(data_dir) if f.endswith('.json')]
+            files = [f for f in os.listdir(data_dir) if f.endswith(('.json', '.csv'))]
             for file in sorted(files):
                 self.files_listbox.insert(tk.END, file)
         except Exception as e:
@@ -306,11 +313,30 @@ class GoogleMyBusinessScraperGUI:
     def view_json_file_content(self, filename):
         try:
             filepath = os.path.join('data', filename)
-            with open(filepath, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            file_ext = os.path.splitext(filename)[1].lower()
             
             self.preview_text.delete(1.0, tk.END)
-            self.preview_text.insert(1.0, json.dumps(data, indent=2, ensure_ascii=False))
+            
+            if file_ext == '.csv':
+                # Leer archivo CSV
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    csv_reader = csv.reader(f)
+                    content = []
+                    for i, row in enumerate(csv_reader):
+                        if i == 0:  # Header
+                            content.append(' | '.join(row))
+                            content.append('-' * len(content[0]))
+                        else:
+                            content.append(' | '.join(row))
+                        if i >= 20:  # Limitar vista previa
+                            content.append('... (archivo truncado para vista previa)')
+                            break
+                    self.preview_text.insert(1.0, '\n'.join(content))
+            else:
+                # Leer archivo JSON
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                self.preview_text.insert(1.0, json.dumps(data, indent=2, ensure_ascii=False))
             
         except Exception as e:
             messagebox.showerror("Error", f"Error al leer el archivo: {e}")
@@ -341,10 +367,19 @@ class GoogleMyBusinessScraperGUI:
             return
         
         filename = self.files_listbox.get(selection[0])
+        # Determinar extensión del archivo original
+        file_ext = os.path.splitext(filename)[1]
+        if file_ext == '.csv':
+            default_ext = ".csv"
+            filetypes = [("CSV files", "*.csv"), ("JSON files", "*.json"), ("All files", "*.*")]
+        else:
+            default_ext = ".json"
+            filetypes = [("JSON files", "*.json"), ("CSV files", "*.csv"), ("All files", "*.*")]
+        
         dest = filedialog.asksaveasfilename(
             title="Guardar archivo como",
-            defaultextension=".json",
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+            defaultextension=default_ext,
+            filetypes=filetypes
         )
         
         if dest:
@@ -365,14 +400,22 @@ class GoogleMyBusinessScraperGUI:
             messagebox.showerror("Error", "Ingresa una palabra clave")
             return
             
+        # Obtener formato seleccionado
+        output_format = self.format_var.get()
+        
         if not filename:
             filename = f"{normalize_filename(keyword)}-data"
         else:
             # Normalizar nombre de archivo
             filename = normalize_filename(filename)
             
-        if not filename.endswith('.json'):
-            filename += '.json'
+        # Agregar extensión apropiada
+        if output_format == "csv":
+            if not filename.endswith('.csv'):
+                filename += '.csv'
+        else:
+            if not filename.endswith('.json'):
+                filename += '.json'
             
         if not self.api_key:
             messagebox.showerror("Error", "No se ha cargado la API Key")
@@ -389,7 +432,7 @@ class GoogleMyBusinessScraperGUI:
         self.scraped_data = []
         
         # Iniciar scraping en hilo separado
-        thread = threading.Thread(target=self.scrape_data, args=(keyword, filename))
+        thread = threading.Thread(target=self.scrape_data, args=(keyword, filename, output_format))
         thread.daemon = True
         thread.start()
         
@@ -501,7 +544,7 @@ class GoogleMyBusinessScraperGUI:
             self.log(f"⚠️ Error obteniendo detalles para place_id '{place_id}': {e}")
             return None
             
-    def scrape_data(self, keyword, filename):
+    def scrape_data(self, keyword, filename, output_format="json"):
         self.log(f"🔍 Iniciando scraping para: {keyword}")
         
         # Verificar límite de resultados
@@ -590,7 +633,10 @@ class GoogleMyBusinessScraperGUI:
         # Guardar todos los datos
         if self.scraped_data:
             filepath = os.path.join('data', filename)
-            self.save_data_to_json(filepath)
+            if output_format == "csv":
+                self.save_data_to_csv(filepath)
+            else:
+                self.save_data_to_json(filepath)
             self.log(f"💾 Datos guardados en: data/{filename}")
             self.log(f"🏁 Completado: {processed_count} negocios procesados de {len(businesses)} encontrados")
         else:
@@ -632,6 +678,60 @@ class GoogleMyBusinessScraperGUI:
         
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(json_data, f, ensure_ascii=False, indent=2)
+    
+    def save_data_to_csv(self, filepath):
+        # Asegurar que el directorio data existe
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        
+        if not self.scraped_data:
+            return
+        
+        # Crear lista de campos seleccionados
+        fieldnames = []
+        field_mapping = {
+            'title': 'titulo',
+            'phone': 'telefono', 
+            'website': 'sitio_web',
+            'address': 'direccion',
+            'place_id': 'place_id',
+            'rating': 'rating',
+            'total_ratings': 'total_ratings',
+            'opening_hours': 'horarios',
+            'price_level': 'nivel_precios'
+        }
+        
+        for field, csv_name in field_mapping.items():
+            if self.field_vars[field].get():
+                fieldnames.append(csv_name)
+        
+        # Escribir archivo CSV
+        with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            
+            for business in self.scraped_data:
+                row = {}
+                
+                if self.field_vars['title'].get():
+                    row['titulo'] = business.title or ''
+                if self.field_vars['phone'].get() and business.phone:
+                    row['telefono'] = business.phone
+                if self.field_vars['website'].get() and business.website:
+                    row['sitio_web'] = business.website
+                if self.field_vars['address'].get() and business.address:
+                    row['direccion'] = business.address
+                if self.field_vars['place_id'].get() and business.place_id:
+                    row['place_id'] = business.place_id
+                if self.field_vars['rating'].get() and business.rating:
+                    row['rating'] = business.rating
+                if self.field_vars['total_ratings'].get() and business.total_ratings:
+                    row['total_ratings'] = business.total_ratings
+                if self.field_vars['opening_hours'].get() and business.opening_hours:
+                    row['horarios'] = business.opening_hours
+                if self.field_vars['price_level'].get() and business.price_level:
+                    row['nivel_precios'] = business.price_level
+                
+                writer.writerow(row)
 
 def main():
     # Cambiar al directorio del script

@@ -2,6 +2,16 @@
 
 Extrae datos de perfiles de Google My Business utilizando la API de Google Places con interfaz gráfica amigable.
 
+## 📸 Capturas de Pantalla
+
+### Interfaz Principal
+![Interfaz del Scraper](https://webdesignerk.com/wp-content/uploads/2025/10/scraper-google-my-business-and-mail.png)
+*Pestaña principal con configuración de búsqueda, selección de campos y controles de scraping*
+
+### Resultados y Gestión de Archivos
+![Resultados del Scraping](https://webdesignerk.com/wp-content/uploads/2025/10/scraper-google-my-business-and-mail-result.png)
+*Vista de los datos extraídos y pestaña de gestión de archivos con vista previa*
+
 ## 🎯 Características
 
 - **Interfaz gráfica intuitiva** con pestañas organizadas

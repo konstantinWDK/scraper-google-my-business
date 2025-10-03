@@ -12,6 +12,8 @@ import re
 from dataclasses import dataclass
 from typing import List, Optional, Dict
 import unicodedata
+from urllib.parse import urljoin, urlparse
+from bs4 import BeautifulSoup
 
 def normalize_filename(filename):
     """Normaliza nombres de archivos: espacios -> guiones, minúsculas, sin caracteres especiales"""
@@ -46,6 +48,7 @@ class BusinessData:
     total_ratings: Optional[int] = None
     opening_hours: Optional[str] = None
     price_level: Optional[int] = None
+    email: Optional[str] = None
 
 class GoogleMyBusinessScraperGUI:
     def __init__(self, root):
@@ -120,7 +123,8 @@ class GoogleMyBusinessScraperGUI:
             'rating': tk.BooleanVar(value=True),
             'total_ratings': tk.BooleanVar(value=True),
             'opening_hours': tk.BooleanVar(value=False),
-            'price_level': tk.BooleanVar(value=False)
+            'price_level': tk.BooleanVar(value=False),
+            'email': tk.BooleanVar(value=False)
         }
         
         field_labels = {
@@ -132,18 +136,26 @@ class GoogleMyBusinessScraperGUI:
             'rating': 'Rating',
             'total_ratings': 'Total Reseñas',
             'opening_hours': 'Horarios',
-            'price_level': 'Nivel de Precios'
+            'price_level': 'Nivel de Precios',
+            'email': 'Email (desde web)'
         }
         
         row = 0
         col = 0
         for field, var in self.field_vars.items():
             cb = tk.Checkbutton(fields_frame, text=field_labels[field], variable=var)
+            if field == 'email':
+                cb.config(fg='#FF6600')  # Color naranja para indicar que es experimental
             cb.grid(row=row, column=col, sticky='w', padx=10, pady=2)
             col += 1
             if col > 2:
                 col = 0
                 row += 1
+        
+        # Advertencia para email
+        email_warning = tk.Label(fields_frame, text="⚠️ Email: Función experimental, puede ser lenta", 
+                                fg='#FF6600', font=('Arial', 8))
+        email_warning.grid(row=row+1, column=0, columnspan=3, sticky='w', padx=10, pady=2)
         
         # Frame para configuración de API
         api_frame = ttk.LabelFrame(self.scraping_frame, text="Configuración de API", padding=10)
@@ -503,6 +515,59 @@ class GoogleMyBusinessScraperGUI:
             return set()
         
         return existing_place_ids
+    
+    def extract_email_from_website(self, website_url):
+        """Extrae emails del sitio web del negocio"""
+        try:
+            # Timeout corto para no bloquear el scraping
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            
+            response = requests.get(website_url, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            # Parsear HTML
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Buscar emails en el texto de la página
+            text_content = soup.get_text()
+            
+            # Patrón regex para emails
+            email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+            emails = re.findall(email_pattern, text_content)
+            
+            if emails:
+                # Filtrar emails comunes no útiles
+                filtered_emails = []
+                exclude_patterns = [
+                    'noreply', 'no-reply', 'donotreply', 'example.com', 
+                    'test.com', 'gmail.com', 'yahoo.com', 'hotmail.com',
+                    'outlook.com', 'facebook.com', 'twitter.com', 'instagram.com'
+                ]
+                
+                for email in emails:
+                    email_lower = email.lower()
+                    if not any(pattern in email_lower for pattern in exclude_patterns):
+                        filtered_emails.append(email)
+                
+                # Retornar el primer email válido encontrado
+                if filtered_emails:
+                    return filtered_emails[0]
+                elif emails:  # Si no hay emails filtrados, retornar el primero
+                    return emails[0]
+            
+            # Si no se encuentra en el texto, buscar en elementos específicos
+            mailto_links = soup.find_all('a', href=re.compile(r'^mailto:'))
+            if mailto_links:
+                email = mailto_links[0]['href'].replace('mailto:', '')
+                return email
+            
+            return None
+            
+        except Exception as e:
+            # No registrar errores para no saturar el log
+            return None
         
     def search_businesses(self, business_name: str) -> List[Dict]:
         """Busca múltiples negocios y retorna lista de place_ids con nombres"""
@@ -596,7 +661,8 @@ class GoogleMyBusinessScraperGUI:
                 rating=result.get('rating') if self.field_vars['rating'].get() else None,
                 total_ratings=result.get('user_ratings_total') if self.field_vars['total_ratings'].get() else None,
                 opening_hours=str(result.get('opening_hours', {}).get('weekday_text', [])) if self.field_vars['opening_hours'].get() else None,
-                price_level=result.get('price_level') if self.field_vars['price_level'].get() else None
+                price_level=result.get('price_level') if self.field_vars['price_level'].get() else None,
+                email=None  # Se llenará después si está habilitado
             )
             
             return business_data
@@ -667,6 +733,16 @@ class GoogleMyBusinessScraperGUI:
             business_data = self.get_business_details(business['place_id'])
             
             if business_data:
+                # Extraer email del sitio web si está habilitado
+                if self.field_vars['email'].get() and business_data.website:
+                    self.log(f"   🔍 Buscando email en: {business_data.website}")
+                    email = self.extract_email_from_website(business_data.website)
+                    if email:
+                        business_data.email = email
+                        self.log(f"   📧 Email encontrado: {email}")
+                    else:
+                        self.log(f"   ❌ No se encontró email en el sitio web")
+                
                 self.scraped_data.append(business_data)
                 processed_count += 1
                 
@@ -680,6 +756,8 @@ class GoogleMyBusinessScraperGUI:
                     self.log(f"   📍 Dirección: {business_data.address}")
                 if business_data.rating:
                     self.log(f"   ⭐ Rating: {business_data.rating} ({business_data.total_ratings or 0} reseñas)")
+                if business_data.email:
+                    self.log(f"   📧 Email: {business_data.email}")
             else:
                 self.log(f"❌ No se pudieron obtener detalles para '{business['name']}'")
             
@@ -768,6 +846,8 @@ class GoogleMyBusinessScraperGUI:
                 data_dict['horarios'] = business.opening_hours
             if self.field_vars['price_level'].get() and business.price_level:
                 data_dict['nivel_precios'] = business.price_level
+            if self.field_vars['email'].get() and business.email:
+                data_dict['email'] = business.email
                 
             json_data.append(data_dict)
         
@@ -789,7 +869,8 @@ class GoogleMyBusinessScraperGUI:
             'rating': 'rating',
             'total_ratings': 'total_ratings',
             'opening_hours': 'horarios',
-            'price_level': 'nivel_precios'
+            'price_level': 'nivel_precios',
+            'email': 'email'
         }
         
         for field, csv_name in field_mapping.items():
@@ -819,6 +900,8 @@ class GoogleMyBusinessScraperGUI:
                 row['horarios'] = business.opening_hours
             if self.field_vars['price_level'].get() and business.price_level:
                 row['nivel_precios'] = business.price_level
+            if self.field_vars['email'].get() and business.email:
+                row['email'] = business.email
             
             new_rows.append(row)
         

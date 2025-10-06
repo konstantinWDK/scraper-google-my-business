@@ -79,9 +79,14 @@ class GoogleMyBusinessScraperGUI:
         # Pestaña de gestión de archivos
         self.files_frame = ttk.Frame(notebook)
         notebook.add(self.files_frame, text="Gestión de Archivos")
-        
+
+        # Pestaña de configuración
+        self.config_frame = ttk.Frame(notebook)
+        notebook.add(self.config_frame, text="Configuración")
+
         self.setup_scraping_tab()
         self.setup_files_tab()
+        self.setup_config_tab()
         self.setup_credits_section()
     
     def setup_scraping_tab(self):
@@ -268,7 +273,156 @@ class GoogleMyBusinessScraperGUI:
         
         self.preview_text = scrolledtext.ScrolledText(preview_frame, height=8, font=('Consolas', 9))
         self.preview_text.pack(fill='both', expand=True)
-        
+
+    def setup_config_tab(self):
+        # Título
+        title_label = tk.Label(self.config_frame, text="Configuración de API Key",
+                              font=('Arial', 16, 'bold'), bg='#f0f0f0')
+        title_label.pack(pady=10)
+
+        # Frame para configuración de API
+        api_config_frame = ttk.LabelFrame(self.config_frame, text="Google Places API Key", padding=20)
+        api_config_frame.pack(fill='both', expand=True, padx=10, pady=5)
+
+        # Estado actual de la API
+        status_frame = tk.Frame(api_config_frame, bg='white', relief='solid', bd=1)
+        status_frame.pack(fill='x', pady=10)
+
+        tk.Label(status_frame, text="Estado:", font=('Arial', 11, 'bold'), bg='white').pack(side='left', padx=10, pady=10)
+        self.api_status_label = tk.Label(status_frame, text="No configurada", font=('Arial', 11), bg='white', fg='red')
+        self.api_status_label.pack(side='left', pady=10)
+
+        # Instrucciones
+        instructions_text = """
+Para usar esta aplicación necesitas una API Key de Google Places.
+
+Pasos para obtener tu API Key:
+1. Ve a: https://console.cloud.google.com/
+2. Crea un nuevo proyecto o selecciona uno existente
+3. Habilita "Places API" en el proyecto
+4. Ve a "Credenciales" y crea una API Key
+5. Copia la API Key y pégala abajo
+        """
+
+        instructions_label = tk.Label(api_config_frame, text=instructions_text,
+                                     justify='left', font=('Arial', 9), bg='#f0f0f0')
+        instructions_label.pack(pady=10, padx=5, anchor='w')
+
+        # Entrada de API Key
+        tk.Label(api_config_frame, text="Ingresa tu API Key:", font=('Arial', 10, 'bold')).pack(anchor='w', pady=(10,5))
+
+        self.api_key_entry = tk.Entry(api_config_frame, width=60, font=('Arial', 10), show='*')
+        self.api_key_entry.pack(fill='x', pady=5)
+
+        # Checkbox para mostrar/ocultar API Key
+        self.show_api_var = tk.BooleanVar(value=False)
+        show_api_check = tk.Checkbutton(api_config_frame, text="Mostrar API Key",
+                                       variable=self.show_api_var, command=self.toggle_api_visibility)
+        show_api_check.pack(anchor='w', pady=5)
+
+        # Botones de acción
+        buttons_frame = tk.Frame(api_config_frame, bg='#f0f0f0')
+        buttons_frame.pack(pady=20)
+
+        tk.Button(buttons_frame, text="Guardar API Key", command=self.save_api_key,
+                 bg='#4CAF50', fg='white', font=('Arial', 11, 'bold'), padx=20, pady=5).pack(side='left', padx=5)
+
+        tk.Button(buttons_frame, text="Cargar desde archivo", command=self.load_api_from_file,
+                 bg='#2196F3', fg='white', font=('Arial', 11, 'bold'), padx=20, pady=5).pack(side='left', padx=5)
+
+        tk.Button(buttons_frame, text="Limpiar", command=self.clear_api_key,
+                 bg='#f44336', fg='white', font=('Arial', 11, 'bold'), padx=20, pady=5).pack(side='left', padx=5)
+
+        # Actualizar el estado inicial
+        self.update_api_status()
+
+    def toggle_api_visibility(self):
+        """Muestra u oculta la API Key en el campo de entrada"""
+        if self.show_api_var.get():
+            self.api_key_entry.config(show='')
+        else:
+            self.api_key_entry.config(show='*')
+
+    def update_api_status(self):
+        """Actualiza el estado visual de la API Key"""
+        if self.api_key and len(self.api_key) > 0:
+            self.api_status_label.config(text="✅ Configurada correctamente", fg='green')
+            # Mostrar los primeros y últimos caracteres de la API key
+            if len(self.api_key) > 10:
+                masked_key = f"{self.api_key[:8]}...{self.api_key[-4:]}"
+            else:
+                masked_key = "***"
+            self.api_key_entry.delete(0, tk.END)
+            self.api_key_entry.insert(0, self.api_key)
+        else:
+            self.api_status_label.config(text="❌ No configurada", fg='red')
+
+    def save_api_key(self):
+        """Guarda la API Key ingresada"""
+        api_key = self.api_key_entry.get().strip()
+
+        if not api_key:
+            messagebox.showerror("Error", "Por favor ingresa una API Key")
+            return
+
+        if len(api_key) < 20:
+            messagebox.showwarning("Advertencia", "La API Key parece muy corta. ¿Estás seguro que es correcta?")
+
+        try:
+            # Guardar en archivo
+            with open(DEFAULT_API_KEY_FILE, 'w', encoding='utf-8') as f:
+                f.write(api_key)
+
+            # Actualizar en memoria
+            self.api_key = api_key
+            self.update_api_status()
+
+            messagebox.showinfo("Éxito", f"API Key guardada correctamente en:\n{DEFAULT_API_KEY_FILE}")
+            self.log("✅ API Key configurada y guardada")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo guardar la API Key:\n{e}")
+
+    def load_api_from_file(self):
+        """Carga la API Key desde un archivo seleccionado"""
+        filepath = filedialog.askopenfilename(
+            title="Seleccionar archivo con API Key",
+            filetypes=[("Archivos de texto", "*.txt"), ("Todos los archivos", "*.*")]
+        )
+
+        if filepath:
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    api_key = f.read().strip()
+
+                if api_key:
+                    self.api_key_entry.delete(0, tk.END)
+                    self.api_key_entry.insert(0, api_key)
+                    messagebox.showinfo("Éxito", "API Key cargada desde archivo")
+                else:
+                    messagebox.showerror("Error", "El archivo está vacío")
+
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo leer el archivo:\n{e}")
+
+    def clear_api_key(self):
+        """Limpia la API Key"""
+        result = messagebox.askyesno("Confirmar",
+                                     "¿Estás seguro de que quieres eliminar la API Key guardada?")
+        if result:
+            try:
+                if os.path.exists(DEFAULT_API_KEY_FILE):
+                    os.remove(DEFAULT_API_KEY_FILE)
+
+                self.api_key = None
+                self.api_key_entry.delete(0, tk.END)
+                self.update_api_status()
+                self.log("❌ API Key eliminada")
+                messagebox.showinfo("Éxito", "API Key eliminada correctamente")
+
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo eliminar la API Key:\n{e}")
+
     def load_api_key(self):
         """Carga la API key desde diferentes fuentes (variables de entorno, archivo, etc.)"""
         try:

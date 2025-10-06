@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# Google My Business Scraper v1.1.0
+# Cambios en v1.1.0:
+# - Guardado seguro y cifrado de API Key
+# - Persistencia automática de API Key entre sesiones
+# - Compatibilidad multiplataforma (Windows/Linux)
+
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, scrolledtext
 import json
@@ -6,7 +12,7 @@ import csv
 import os
 import threading
 import requests
-import time 
+import time
 import random
 import re
 import webbrowser
@@ -15,6 +21,12 @@ from typing import List, Optional, Dict
 import unicodedata
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
+import base64
+import hashlib
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+import platform
 
 def normalize_filename(filename):
     """Normaliza nombres de archivos: espacios -> guiones, minúsculas, sin caracteres especiales"""
@@ -34,9 +46,69 @@ def normalize_filename(filename):
     return filename
 
 # Configuración por defecto
-DEFAULT_API_KEY_FILE = 'google_api_key.txt'
+DEFAULT_API_KEY_FILE = '.gmb_config.enc'  # Archivo cifrado
 URL_TEXT_SEARCH = 'https://maps.googleapis.com/maps/api/place/textsearch/json'
 URL_PLACE_DETAILS = 'https://maps.googleapis.com/maps/api/place/details/json'
+APP_VERSION = "1.1.0"
+
+class SecureConfig:
+    """Gestión segura de configuración con cifrado"""
+
+    def __init__(self):
+        self.config_file = DEFAULT_API_KEY_FILE
+        self._key = self._get_machine_key()
+        self.fernet = Fernet(self._key)
+
+    def _get_machine_key(self):
+        """Genera una clave de cifrado única basada en la máquina"""
+        # Obtener un identificador único de la máquina
+        machine_id = platform.node() + platform.system() + os.path.expanduser("~")
+
+        # Derivar una clave de cifrado usando PBKDF2
+        kdf = PBKDF2(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=b'gmb_scraper_salt_v1',  # Salt fijo para consistencia
+            iterations=100000,
+        )
+        key = base64.urlsafe_b64encode(kdf.derive(machine_id.encode()))
+        return key
+
+    def save_api_key(self, api_key: str) -> bool:
+        """Guarda la API Key cifrada"""
+        try:
+            encrypted_key = self.fernet.encrypt(api_key.encode())
+            with open(self.config_file, 'wb') as f:
+                f.write(encrypted_key)
+            return True
+        except Exception as e:
+            print(f"Error guardando API Key: {e}")
+            return False
+
+    def load_api_key(self) -> Optional[str]:
+        """Carga y descifra la API Key"""
+        try:
+            if not os.path.exists(self.config_file):
+                return None
+
+            with open(self.config_file, 'rb') as f:
+                encrypted_key = f.read()
+
+            decrypted_key = self.fernet.decrypt(encrypted_key)
+            return decrypted_key.decode()
+        except Exception as e:
+            print(f"Error cargando API Key: {e}")
+            return None
+
+    def delete_api_key(self) -> bool:
+        """Elimina el archivo de configuración"""
+        try:
+            if os.path.exists(self.config_file):
+                os.remove(self.config_file)
+            return True
+        except Exception as e:
+            print(f"Error eliminando API Key: {e}")
+            return False
 
 @dataclass
 class BusinessData:
@@ -54,15 +126,16 @@ class BusinessData:
 class GoogleMyBusinessScraperGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Google My Business Scraper")
+        self.root.title(f"Google My Business Scraper v{APP_VERSION}")
         self.root.geometry("900x700")
         self.root.configure(bg='#f0f0f0')
-        
+
         # Variables
         self.api_key = None
         self.is_scraping = False
         self.scraped_data = []
-        
+        self.secure_config = SecureConfig()
+
         self.setup_ui()
         self.load_api_key()
         self.refresh_json_files()
@@ -358,7 +431,7 @@ Pasos para obtener tu API Key:
             self.api_status_label.config(text="❌ No configurada", fg='red')
 
     def save_api_key(self):
-        """Guarda la API Key ingresada"""
+        """Guarda la API Key ingresada de forma segura y cifrada"""
         api_key = self.api_key_entry.get().strip()
 
         if not api_key:
@@ -366,19 +439,27 @@ Pasos para obtener tu API Key:
             return
 
         if len(api_key) < 20:
-            messagebox.showwarning("Advertencia", "La API Key parece muy corta. ¿Estás seguro que es correcta?")
+            result = messagebox.askyesno("Advertencia",
+                                        "La API Key parece muy corta. ¿Estás seguro que es correcta?")
+            if not result:
+                return
 
         try:
-            # Guardar en archivo
-            with open(DEFAULT_API_KEY_FILE, 'w', encoding='utf-8') as f:
-                f.write(api_key)
+            # Guardar en archivo cifrado
+            success = self.secure_config.save_api_key(api_key)
 
-            # Actualizar en memoria
-            self.api_key = api_key
-            self.update_api_status()
+            if success:
+                # Actualizar en memoria
+                self.api_key = api_key
+                self.update_api_status()
 
-            messagebox.showinfo("Éxito", f"API Key guardada correctamente en:\n{DEFAULT_API_KEY_FILE}")
-            self.log("✅ API Key configurada y guardada")
+                messagebox.showinfo("Éxito",
+                                   "✅ API Key guardada correctamente\n\n"
+                                   "Tu API Key se ha guardado de forma segura y cifrada.\n"
+                                   "Se cargará automáticamente al iniciar la aplicación.")
+                self.log("✅ API Key configurada y guardada de forma segura")
+            else:
+                messagebox.showerror("Error", "No se pudo guardar la API Key")
 
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo guardar la API Key:\n{e}")
@@ -411,45 +492,58 @@ Pasos para obtener tu API Key:
                                      "¿Estás seguro de que quieres eliminar la API Key guardada?")
         if result:
             try:
-                if os.path.exists(DEFAULT_API_KEY_FILE):
-                    os.remove(DEFAULT_API_KEY_FILE)
+                success = self.secure_config.delete_api_key()
 
-                self.api_key = None
-                self.api_key_entry.delete(0, tk.END)
-                self.update_api_status()
-                self.log("❌ API Key eliminada")
-                messagebox.showinfo("Éxito", "API Key eliminada correctamente")
+                if success:
+                    self.api_key = None
+                    self.api_key_entry.delete(0, tk.END)
+                    self.update_api_status()
+                    self.log("❌ API Key eliminada")
+                    messagebox.showinfo("Éxito", "API Key eliminada correctamente")
+                else:
+                    messagebox.showerror("Error", "No se pudo eliminar la API Key")
 
             except Exception as e:
                 messagebox.showerror("Error", f"No se pudo eliminar la API Key:\n{e}")
 
     def load_api_key(self):
-        """Carga la API key desde diferentes fuentes (variables de entorno, archivo, etc.)"""
+        """Carga la API key desde diferentes fuentes (variables de entorno, archivo cifrado, etc.)"""
         try:
             # Prioridad 1: Variable de entorno
             api_key = os.environ.get('GOOGLE_PLACES_API_KEY')
             if api_key:
                 self.api_key = api_key.strip()
                 self.log("✅ API Key cargada desde variable de entorno")
+                self.update_api_status()
                 return
-            
-            # Prioridad 2: Archivo local
-            if os.path.isfile(DEFAULT_API_KEY_FILE):
-                with open(DEFAULT_API_KEY_FILE, 'r', encoding='utf-8') as f:
-                    self.api_key = f.read().strip()
-                self.log("✅ API Key cargada desde archivo local")
+
+            # Prioridad 2: Archivo cifrado
+            api_key = self.secure_config.load_api_key()
+            if api_key:
+                self.api_key = api_key
+                self.log("✅ API Key cargada desde configuración guardada")
+                self.update_api_status()
                 return
-            
+
+            # Prioridad 3: Archivo de texto plano legacy (compatibilidad con versiones anteriores)
+            legacy_file = 'google_api_key.txt'
+            if os.path.isfile(legacy_file):
+                with open(legacy_file, 'r', encoding='utf-8') as f:
+                    api_key = f.read().strip()
+                    if api_key:
+                        self.api_key = api_key
+                        self.log("⚠️ API Key cargada desde archivo legacy")
+                        self.log("💡 Se recomienda guardar la API Key desde la pestaña Configuración para usar cifrado")
+                        self.update_api_status()
+                        return
+
             # No se encontró API key
-            self.log("❌ No se encontró API Key")
-            messagebox.showerror("Error de API Key", 
-                               f"No se encontró la API Key. Opciones:\n\n"
-                               f"1. Crear archivo: {DEFAULT_API_KEY_FILE}\n"
-                               f"2. Variable de entorno: GOOGLE_PLACES_API_KEY\n"
-                               f"3. Usar el archivo de ejemplo como plantilla")
+            self.log("ℹ️ No se encontró API Key configurada")
+            self.log("💡 Por favor, configura tu API Key en la pestaña 'Configuración'")
+
         except Exception as e:
             self.log(f"❌ Error cargando API Key: {e}")
-            messagebox.showerror("Error", f"Error al cargar API Key: {e}")
+            print(f"Error completo: {e}")
             
     def log(self, message):
         self.log_text.insert(tk.END, f"{time.strftime('%H:%M:%S')} - {message}\n")

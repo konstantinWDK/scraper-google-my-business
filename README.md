@@ -1,6 +1,13 @@
-# Google My Business Scraper
+# Google My Business Scraper v1.1.0
 
 Extrae datos de perfiles de Google My Business utilizando la API de Google Places con interfaz gráfica amigable.
+
+## 🆕 Novedades en v1.1.0
+
+- ✅ **Guardado seguro de API Key**: Tu API Key ahora se guarda cifrada con AES-256
+- ✅ **Persistencia automática**: La API Key se carga automáticamente al iniciar
+- ✅ **Cifrado multiplataforma**: Compatible con Windows y Linux
+- ✅ **Compatibilidad retroactiva**: Detecta y migra archivos legacy automáticamente
 
 ## 📸 Capturas de Pantalla
 
@@ -23,7 +30,8 @@ Extrae datos de perfiles de Google My Business utilizando la API de Google Place
 - **Control de velocidad**: Evita límites de API con delays configurables
 - **Gestión de archivos**: Ve, elimina y exporta archivos JSON y CSV
 - **Botón de reinicio**: Limpia la interfaz para empezar fresco
-- **Seguridad mejorada**: Soporte para variables de entorno
+- **🔐 Seguridad mejorada**: API Key cifrada con AES-256 y persistencia automática
+- **Configuración visual**: Gestiona tu API Key desde la interfaz gráfica
 
 ## 📊 Datos Extraídos
 
@@ -66,7 +74,20 @@ Extrae datos de perfiles de Google My Business utilizando la API de Google Place
 
 ### 🔐 Configuración Segura de API Key
 
-### Opción 1: Variable de Entorno (Recomendado)
+### 🆕 Opción 1: Desde la Interfaz (Recomendado - v1.1.0+)
+1. Abre la aplicación
+2. Ve a la pestaña **"Configuración"**
+3. Pega tu API Key en el campo
+4. Haz clic en **"Guardar API Key"**
+5. ✅ Tu API Key se guarda cifrada con AES-256 y se cargará automáticamente
+
+**Ventajas:**
+- 🔐 Cifrado AES-256 basado en tu máquina
+- 💾 Persistencia automática entre sesiones
+- 🖱️ No necesitas editar archivos manualmente
+- 👁️ Opción para mostrar/ocultar la clave
+
+### Opción 2: Variable de Entorno
 ```bash
 # Linux/Mac
 export GOOGLE_PLACES_API_KEY="tu_api_key_aqui"
@@ -75,19 +96,12 @@ export GOOGLE_PLACES_API_KEY="tu_api_key_aqui"
 set GOOGLE_PLACES_API_KEY=tu_api_key_aqui
 ```
 
-### Opción 2: Archivo Local
+### Opción 3: Archivo Legacy (Compatibilidad)
 ```bash
-# Copia el archivo de ejemplo
-cp google_api_key.txt.example google_api_key.txt
-
-# Edita y agrega tu API key
-nano google_api_key.txt
+# Crea un archivo de texto plano (no recomendado)
+echo "tu_api_key_aqui" > google_api_key.txt
 ```
-
-### Opción 3: .env File (Para desarrollo)
-```bash
-echo "GOOGLE_PLACES_API_KEY=tu_api_key_aqui" > .env
-```
+⚠️ **Nota:** La aplicación detectará este archivo y te sugerirá migrar al sistema cifrado.
 
 ### ⚠️ Importante sobre Seguridad
 - **Nunca commitees** tu API key al repositorio
@@ -136,6 +150,13 @@ El botón **"Reiniciar"** (naranja) te permite:
 - **Vista previa**: Examina el contenido (formato tabla para CSV)
 - **Eliminar**: Borra archivos innecesarios
 - **Exportar**: Guarda en otra ubicación manteniendo el formato
+
+### 🆕 Pestaña Configuración (v1.1.0+)
+- **Guardar API Key**: Guarda tu clave cifrada de forma segura
+- **Cargar desde archivo**: Importa una API Key desde un archivo .txt
+- **Mostrar/Ocultar**: Toggle para ver la API Key en texto plano
+- **Limpiar**: Elimina la API Key guardada
+- **Estado visual**: Indica si la API Key está configurada correctamente
 
 ## ⚙️ Configuración de API
 

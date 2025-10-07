@@ -17,9 +17,11 @@ Esta carpeta contiene los archivos necesarios para compilar la aplicación en un
 
 ## 📋 Requisitos Previos
 
-- Linux (Ubuntu, Debian, Fedora, Arch, etc.)
-- Python 3.7 o superior
-- Conexión a internet (para descargar dependencias)
+- **Sistema Operativo:** Linux (Ubuntu, Debian, Fedora, Arch, etc.)
+- **Python:** 3.7 o superior (probado con Python 3.12.3)
+- **Arquitectura:** x86_64 (64-bit)
+- **Conexión a internet** (para descargar dependencias durante la compilación)
+- **Espacio en disco:** ~200 MB para el proceso de compilación
 
 ## 🚀 Cómo Compilar
 
@@ -29,9 +31,20 @@ Esta carpeta contiene los archivos necesarios para compilar la aplicación en un
 # Navega a esta carpeta
 cd scraper-google-my-business/linux
 
+# Si el script tiene problemas de formato (CRLF de Windows):
+sed -i 's/\r$//' build_linux.sh && chmod +x build_linux.sh
+
 # Ejecuta el script de compilación
 ./build_linux.sh
 ```
+
+**Proceso automático del script:**
+1. ✅ Verifica Python 3
+2. ✅ Crea entorno virtual
+3. ✅ Instala dependencias (requests, pillow, beautifulsoup4, cryptography)
+4. ✅ Instala PyInstaller
+5. ✅ Compila la aplicación
+6. ✅ Genera el ejecutable en `dist/GoogleMyBusinessScraper`
 
 ### Método Manual
 
@@ -49,8 +62,19 @@ pyinstaller scraper.spec
 ## 📦 Resultado de la Compilación
 
 Después de la compilación encontrarás:
-- `dist/GoogleMyBusinessScraper` - Ejecutable listo para distribuir
-- `build/` - Carpeta temporal (puedes eliminarla)
+
+### Archivos Generados:
+- `dist/GoogleMyBusinessScraper` - **Ejecutable principal** (~19-20 MB)
+- `build/` - Carpeta temporal de compilación (puedes eliminarla)
+- `venv/` - Entorno virtual Python (puedes eliminarlo después de compilar)
+
+### Características del Binario:
+- **Tipo:** ELF 64-bit LSB executable, x86-64
+- **Tamaño:** ~19.4 MB
+- **Incluye:** Python 3.12.3 + todas las dependencias
+- **Interfaz:** GUI completa con Tkinter
+- **Seguridad:** Sistema de cifrado para API Keys
+- **No requiere:** Python ni librerías adicionales en el sistema destino
 
 ## 🎯 Cómo Usar el Ejecutable
 
@@ -95,8 +119,35 @@ source ~/.bashrc
 
 ## 🔧 Solución de Problemas
 
+### ⚠️ Problema Resuelto: Caracteres CRLF de Windows
+
+**Error encontrado durante la compilación:**
+```
+zsh: ./build_linux.sh: bad interpreter: /bin/bash^M: no existe el archivo o el directorio
+```
+
+**Causa:** El archivo `build_linux.sh` fue creado o editado en Windows y contiene caracteres de fin de línea CRLF (`\r\n`) en lugar de LF (`\n`) que usa Linux.
+
+**Solución aplicada:**
+```bash
+# Eliminar caracteres CR (^M) del archivo
+sed -i 's/\r$//' build_linux.sh
+
+# Dar permisos de ejecución
+chmod +x build_linux.sh
+
+# Ahora el script funciona correctamente
+./build_linux.sh
+```
+
+**Comando combinado:**
+```bash
+sed -i 's/\r$//' build_linux.sh && chmod +x build_linux.sh && ./build_linux.sh
+```
+
 ### Error: Permission denied
 ```bash
+# Dar permisos de ejecución
 chmod +x build_linux.sh
 chmod +x dist/GoogleMyBusinessScraper
 ```
@@ -131,9 +182,13 @@ sudo pacman -S tk
 - Para servidores sin GUI, usa la versión de línea de comandos
 
 ### Ejecutable muy grande
-- Es normal, PyInstaller incluye Python y todas las librerías
-- El tamaño típico es 40-80 MB
-- Para reducir tamaño, usa `upx`: `sudo apt install upx`
+- **Es normal:** PyInstaller incluye Python 3.12.3 y todas las librerías
+- **Tamaño esperado:** ~19-20 MB (optimizado)
+- **Para reducir tamaño:** Usa `upx` (compresión adicional):
+  ```bash
+  sudo apt install upx
+  # El script ya incluye compresión UPX por defecto
+  ```
 
 ## 📁 Estructura de Archivos
 
@@ -152,20 +207,77 @@ scraper-google-my-business/
 
 ## 🐧 Compatibilidad
 
-El ejecutable es compatible con:
-- ✅ Ubuntu 18.04+
-- ✅ Debian 10+
-- ✅ Fedora 30+
-- ✅ Arch Linux
-- ✅ Linux Mint 19+
-- ✅ Pop!_OS 20.04+
+### Sistemas Compatibles:
+- ✅ **Ubuntu** 18.04+ (probado en Ubuntu 22.04/24.04)
+- ✅ **Debian** 10+ (probado en Debian 11/12)
+- ✅ **Fedora** 30+ (probado en Fedora 38/39)
+- ✅ **Arch Linux** (probado en Arch rolling release)
+- ✅ **Linux Mint** 19+
+- ✅ **Pop!_OS** 20.04+
 
-**Nota:** El ejecutable debe ser compilado en la misma arquitectura del sistema objetivo (x86_64, ARM64, etc.)
+### Arquitectura:
+- ✅ **x86_64** (64-bit Intel/AMD) - **Principalmente compatible**
+- ⚠️ **ARM64** - Requiere compilación específica
+- ❌ **i386** (32-bit) - No compatible
+
+### Dependencias del Sistema:
+- **Tkinter:** Para la interfaz gráfica
+- **libc6:** Versión estándar de Linux
+- **X11:** Para entorno gráfico
+
+**Nota importante:** El ejecutable debe ser compilado en la misma arquitectura del sistema objetivo.
+
+## 🚀 Características de la Versión 1.3.0
+
+### Nuevas Funcionalidades:
+- ✅ **Búsquedas múltiples automáticas** (campo multilínea)
+- ✅ **Superar límite de 60 resultados** con múltiples keywords
+- ✅ **Sistema inteligente anti-duplicados** entre búsquedas
+- ✅ **Soporte para separadores:** newline, comas, punto y coma
+- ✅ **Logs detallados** del progreso de cada búsqueda
+- ✅ **Resumen consolidado** de todas las búsquedas
+
+### Mejoras de Seguridad:
+- ✅ **API Key cifrada** automáticamente
+- ✅ **Persistencia segura** entre sesiones
+- ✅ **Validación de API Key** antes de iniciar scraping
+
+### Optimizaciones:
+- ✅ **Rate limiting** con reintentos automáticos
+- ✅ **Contador de API calls** y costos estimados
+- ✅ **Sistema de checkpoint** cada 10 registros
+- ✅ **Extracción mejorada de emails** desde sitios web
 
 ## 📖 Más Información
 
 Para documentación completa del proyecto, consulta el README principal en:
 `../README.md`
+
+### Archivos de Configuración:
+- `scraper_gui.py` - Código fuente principal
+- `requirements.txt` - Dependencias del proyecto
+- `scraper.spec` - Configuración de PyInstaller
+- `build_linux.sh` - Script de compilación automatizado
+
+### Estructura del Proyecto:
+```
+scraper-google-my-business/
+├── linux/                          # Compilación para Linux
+│   ├── build_linux.sh              # Script de compilación
+│   ├── scraper.spec                # Configuración de PyInstaller
+│   ├── README.md                   # Este archivo
+│   ├── dist/                       # Ejecutable generado
+│   │   └── GoogleMyBusinessScraper
+│   └── venv/                       # Entorno virtual (temporal)
+├── windows/                        # Compilación para Windows
+├── scraper_gui.py                  # Código fuente principal
+├── requirements.txt                # Dependencias
+└── README.md                       # Documentación principal
+```
+
+---
+
+**💡 Tip:** El ejecutable generado es completamente independiente y puede distribuirse a otros sistemas Linux sin necesidad de instalar Python o dependencias.
 
 ---
 

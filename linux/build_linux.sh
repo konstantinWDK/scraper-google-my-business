@@ -32,7 +32,23 @@ echo ""
 source venv/bin/activate
 
 echo "[3/5] Instalando dependencias..."
-pip install -r ../requirements.txt
+# Verificar si estamos en Windows (Git Bash, WSL, etc.)
+if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "win32" ]]; then
+    # En Windows, usar ruta absoluta o verificar ubicación
+    if [ -f "../requirements.txt" ]; then
+        pip install -r ../requirements.txt
+    elif [ -f "../../requirements.txt" ]; then
+        pip install -r ../../requirements.txt
+    else
+        echo "ERROR: No se pudo encontrar requirements.txt"
+        echo "Asegúrate de que el archivo requirements.txt esté en el directorio padre"
+        exit 1
+    fi
+else
+    # En Linux, usar ruta relativa normal
+    pip install -r ../requirements.txt
+fi
+
 if [ $? -ne 0 ]; then
     echo "ERROR: No se pudieron instalar las dependencias"
     exit 1
@@ -48,7 +64,23 @@ fi
 echo ""
 
 echo "[5/5] Compilando aplicación..."
-pyinstaller scraper.spec --clean
+# Verificar si estamos en Windows
+if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "win32" ]]; then
+    # En Windows, usar ruta absoluta para el archivo spec
+    if [ -f "scraper.spec" ]; then
+        pyinstaller scraper.spec --clean
+    elif [ -f "../scraper_gui.py" ]; then
+        # Si no hay spec, crear uno automáticamente
+        pyinstaller --onefile --name GoogleMyBusinessScraper --clean ../scraper_gui.py
+    else
+        echo "ERROR: No se pudo encontrar scraper_gui.py"
+        exit 1
+    fi
+else
+    # En Linux, usar configuración normal
+    pyinstaller scraper.spec --clean
+fi
+
 if [ $? -ne 0 ]; then
     echo "ERROR: Falló la compilación"
     deactivate

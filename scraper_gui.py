@@ -1,5 +1,25 @@
 #!/usr/bin/env python3
-# Google My Business Scraper v1.1.0
+# Google My Business Scraper v1.3.0
+# Cambios en v1.3.0:
+# - Búsquedas múltiples automáticas (campo multilínea)
+# - Superar límite de 60 resultados con múltiples keywords
+# - Sistema inteligente anti-duplicados entre búsquedas
+# - Soporte para separadores: newline, comas, punto y coma
+# - Logs detallados del progreso de cada búsqueda
+# - Resumen consolidado de todas las búsquedas
+# - Advertencias actualizadas sobre límite de API
+# - Popup informativo mejorado con ejemplos de uso
+#
+# Cambios en v1.2.0:
+# - Sistema de logging en archivo con rotación automática
+# - Validación de API Key antes de iniciar scraping
+# - Manejo de Rate Limiting (429 errors) con reintentos automáticos
+# - Contador de API calls y costos estimados en tiempo real
+# - Sistema de Checkpoint cada 10 registros para reanudar scraping
+# - Mejora inteligente en scraping de emails (páginas de contacto, footer, cache)
+# - Botón Reiniciar mejorado con tracking de threads
+# - Gestión de errores mejorada con logs específicos
+#
 # Cambios en v1.1.0:
 # - Guardado seguro y cifrado de API Key
 # - Persistencia automática de API Key entre sesiones
@@ -27,6 +47,8 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import platform
+import logging
+from logging.handlers import RotatingFileHandler
 
 def normalize_filename(filename):
     """Normaliza nombres de archivos: espacios -> guiones, minúsculas, sin caracteres especiales"""
@@ -45,17 +67,61 @@ def normalize_filename(filename):
     filename = filename.strip('-')
     return filename
 
+def parse_keywords(text):
+    """Parsea texto con múltiples keywords y retorna lista limpia"""
+    # Reemplazar comas y punto y coma por saltos de línea
+    text = text.replace(',', '\n').replace(';', '\n')
+
+    # Dividir por líneas y limpiar
+    keywords = []
+    for line in text.split('\n'):
+        line = line.strip()
+        if line:  # Ignorar líneas vacías
+            keywords.append(line)
+
+    return keywords
+
+def setup_logging():
+    """Configura el sistema de logging con rotación de archivos"""
+    # Obtener directorio del script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    log_file = os.path.join(script_dir, 'scraper.log')
+
+    # Configurar logging con rotación (max 5 archivos de 1MB cada uno)
+    handler = RotatingFileHandler(
+        log_file,
+        maxBytes=1024*1024,  # 1MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+
+    # Formato del log
+    formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    handler.setFormatter(formatter)
+
+    # Configurar logger
+    logger = logging.getLogger('GMBScraper')
+    logger.setLevel(logging.INFO)
+    logger.addHandler(handler)
+
+    return logger
+
 # Configuración por defecto
 DEFAULT_API_KEY_FILE = '.gmb_config.enc'  # Archivo cifrado
 URL_TEXT_SEARCH = 'https://maps.googleapis.com/maps/api/place/textsearch/json'
 URL_PLACE_DETAILS = 'https://maps.googleapis.com/maps/api/place/details/json'
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.3.0"
 
 class SecureConfig:
     """Gestión segura de configuración con cifrado"""
 
     def __init__(self):
-        self.config_file = DEFAULT_API_KEY_FILE
+        # Usar ruta absoluta basada en el directorio del script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.config_file = os.path.join(script_dir, DEFAULT_API_KEY_FILE)
         self._key = self._get_machine_key()
         self.fernet = Fernet(self._key)
 
@@ -135,6 +201,13 @@ class GoogleMyBusinessScraperGUI:
         self.is_scraping = False
         self.scraped_data = []
         self.secure_config = SecureConfig()
+        self.scraping_thread = None
+        self.api_calls_count = 0
+        self.estimated_cost = 0.0
+        self.visited_websites_no_email = set()  # Cache de URLs sin email
+
+        # Inicializar logger
+        self.logger = setup_logging()
 
         self.setup_ui()
         self.load_api_key()
@@ -172,10 +245,15 @@ class GoogleMyBusinessScraperGUI:
         input_frame = ttk.LabelFrame(self.scraping_frame, text="Configuración de Búsqueda", padding=10)
         input_frame.pack(fill='x', padx=10, pady=5)
         
-        # Entrada de palabra clave
-        tk.Label(input_frame, text="Palabra clave para buscar:").grid(row=0, column=0, sticky='w', pady=5)
-        self.keyword_entry = tk.Entry(input_frame, width=50, font=('Arial', 10))
-        self.keyword_entry.grid(row=0, column=1, columnspan=2, sticky='ew', pady=5)
+        # Entrada de palabras clave (múltiples líneas)
+        keyword_label_frame = tk.Frame(input_frame)
+        keyword_label_frame.grid(row=0, column=0, sticky='nw', pady=5)
+
+        tk.Label(keyword_label_frame, text="Palabras clave para buscar:").pack(anchor='w')
+        tk.Label(keyword_label_frame, text="(una por línea)", font=('Arial', 8), fg='#666666').pack(anchor='w')
+
+        self.keyword_entry = scrolledtext.ScrolledText(input_frame, width=50, height=4, font=('Arial', 10))
+        self.keyword_entry.grid(row=0, column=1, columnspan=2, sticky='ew', pady=5, padx=(5,0))
         
         # Nombre del archivo de salida
         tk.Label(input_frame, text="Nombre del archivo:").grid(row=1, column=0, sticky='w', pady=5)
@@ -267,12 +345,27 @@ class GoogleMyBusinessScraperGUI:
                   textvariable=self.batch_delay_var).grid(row=1, column=3, sticky='w', padx=5)
         
         # Límite de resultados
-        tk.Label(api_frame, text="Máx resultados:").grid(row=2, column=0, sticky='w', pady=2)
+        results_label_frame = tk.Frame(api_frame)
+        results_label_frame.grid(row=2, column=0, sticky='w', pady=2)
+
+        tk.Label(results_label_frame, text="Máx resultados:").pack(side='left')
+
+        # Botón de información
+        info_button = tk.Button(results_label_frame, text="ℹ️", font=('Arial', 8),
+                               command=self.show_60_limit_info, bg='#2196F3', fg='white',
+                               cursor='hand2', padx=2, pady=0, relief='flat')
+        info_button.pack(side='left', padx=5)
+
         self.max_results_var = tk.StringVar(value="")
         max_results_spinbox = tk.Spinbox(api_frame, from_=1, to=200, width=8,
                                         textvariable=self.max_results_var)
         max_results_spinbox.grid(row=2, column=1, sticky='w', padx=5)
         tk.Label(api_frame, text="(vacío = todos)").grid(row=2, column=2, sticky='w', padx=5)
+
+        # Advertencia del límite de 60
+        warning_label = tk.Label(api_frame, text="⚠️ Límite: 60 resultados por palabra clave | 💡 Usa múltiples líneas para más resultados",
+                                fg='#FF9800', font=('Arial', 8))
+        warning_label.grid(row=3, column=0, columnspan=4, sticky='w', pady=(2, 5))
         
         # Botones de control
         control_frame = tk.Frame(self.scraping_frame, bg='#f0f0f0')
@@ -302,12 +395,21 @@ class GoogleMyBusinessScraperGUI:
         
         # Barra de progreso
         self.progress_var = tk.StringVar(value="Listo para comenzar")
-        progress_label = tk.Label(self.scraping_frame, textvariable=self.progress_var, 
+        progress_label = tk.Label(self.scraping_frame, textvariable=self.progress_var,
                                  bg='#f0f0f0', font=('Arial', 10))
         progress_label.pack(pady=5)
-        
+
         self.progress_bar = ttk.Progressbar(self.scraping_frame, mode='determinate')
         self.progress_bar.pack(fill='x', padx=10, pady=5)
+
+        # Contador de API calls y costos
+        api_stats_frame = tk.Frame(self.scraping_frame, bg='#f0f0f0')
+        api_stats_frame.pack(pady=5)
+
+        self.api_stats_var = tk.StringVar(value="API Calls: 0 | Costo estimado: $0.00")
+        api_stats_label = tk.Label(api_stats_frame, textvariable=self.api_stats_var,
+                                   bg='#f0f0f0', font=('Arial', 9), fg='#666666')
+        api_stats_label.pack()
         
     def setup_files_tab(self):
         # Título
@@ -546,9 +648,144 @@ Pasos para obtener tu API Key:
             print(f"Error completo: {e}")
             
     def log(self, message):
-        self.log_text.insert(tk.END, f"{time.strftime('%H:%M:%S')} - {message}\n")
+        """Log message to both GUI and file"""
+        timestamp = time.strftime('%H:%M:%S')
+        formatted_message = f"{timestamp} - {message}"
+
+        # Log en GUI
+        self.log_text.insert(tk.END, f"{formatted_message}\n")
         self.log_text.see(tk.END)
         self.root.update_idletasks()
+
+        # Log en archivo
+        # Quitar emojis para el archivo de log
+        clean_message = message.encode('ascii', 'ignore').decode('ascii')
+        self.logger.info(clean_message)
+
+    def increment_api_calls(self, call_type='details'):
+        """Incrementa contador de API calls y actualiza costo"""
+        self.api_calls_count += 1
+
+        # Costos de Places API (por llamada)
+        # Text Search: $0.017
+        # Details: $0.017
+        cost_per_call = 0.017
+        self.estimated_cost += cost_per_call
+
+        # Actualizar GUI
+        self.api_stats_var.set(
+            f"API Calls: {self.api_calls_count} | Costo estimado: ${self.estimated_cost:.3f}"
+        )
+        self.root.update_idletasks()
+
+    def validate_api_key(self):
+        """Valida la API key haciendo una petición de prueba"""
+        if not self.api_key:
+            return False
+
+        try:
+            self.log("🔍 Validando API Key...")
+            params = {
+                'query': 'test',
+                'key': self.api_key
+            }
+
+            response = requests.get(URL_TEXT_SEARCH, params=params, timeout=10)
+            data = response.json()
+
+            status = data.get('status', 'UNKNOWN')
+
+            if status == 'REQUEST_DENIED':
+                error_msg = data.get('error_message', 'API Key inválida o sin permisos')
+                self.log(f"❌ API Key inválida: {error_msg}")
+                return False
+            elif status == 'INVALID_REQUEST' or status == 'ZERO_RESULTS' or status == 'OK':
+                # Estos estados significan que la API key es válida
+                self.log("✅ API Key válida")
+                return True
+            else:
+                self.log(f"⚠️ Estado inesperado: {status}")
+                return False
+
+        except requests.RequestException as e:
+            self.log(f"❌ Error validando API Key: {e}")
+            return False
+
+    def save_checkpoint(self, filename, processed_count):
+        """Guarda checkpoint del progreso actual"""
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        checkpoint_file = os.path.join(script_dir, '.scraper_checkpoint.json')
+
+        checkpoint_data = {
+            'filename': filename,
+            'processed_count': processed_count,
+            'timestamp': time.time(),
+            'scraped_data_count': len(self.scraped_data)
+        }
+
+        try:
+            with open(checkpoint_file, 'w', encoding='utf-8') as f:
+                json.dump(checkpoint_data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            self.log(f"⚠️ Error guardando checkpoint: {e}")
+
+    def clear_checkpoint(self):
+        """Elimina el archivo de checkpoint"""
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        checkpoint_file = os.path.join(script_dir, '.scraper_checkpoint.json')
+
+        try:
+            if os.path.exists(checkpoint_file):
+                os.remove(checkpoint_file)
+        except Exception as e:
+            self.log(f"⚠️ Error eliminando checkpoint: {e}")
+
+    def show_60_limit_info(self):
+        """Muestra información sobre cómo obtener más de 60 resultados"""
+        info_message = """Google Places API limita cada búsqueda a 60 resultados máximos.
+
+✅ BÚSQUEDAS MÚLTIPLES AUTOMÁTICAS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Escribe una palabra clave por línea en el campo de búsqueda:
+
+   restaurantes Madrid Centro
+   restaurantes Madrid Norte
+   restaurantes Madrid Sur
+
+El sistema buscará automáticamente en cada una y
+combinará los resultados sin duplicados.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔹 Ejemplo por ubicación específica:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Escribe cada línea:
+      restaurantes Madrid Centro
+      restaurantes Madrid Norte
+      restaurantes Madrid Sur
+      restaurantes Madrid Este
+
+   Resultado: 240 resultados únicos
+
+🔹 Ejemplo por tipo de negocio:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Escribe cada línea:
+      restaurantes italianos Madrid
+      restaurantes japoneses Madrid
+      restaurantes mexicanos Madrid
+
+   Resultado: 180 resultados únicos
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 También puedes separar por comas:
+   "restaurantes Madrid, cafeterías Madrid, bares Madrid"
+
+💡 El sistema detecta automáticamente duplicados
+   entre búsquedas y con el archivo existente."""
+
+        messagebox.showinfo("Cómo obtener más de 60 resultados", info_message)
         
     def refresh_json_files(self):
         self.files_listbox.delete(0, tk.END)
@@ -660,18 +897,27 @@ Pasos para obtener tu API Key:
                 messagebox.showerror("Error", f"Error al exportar: {e}")
                 
     def start_scraping(self):
-        keyword = self.keyword_entry.get().strip()
+        # Obtener texto del widget de múltiples líneas
+        keywords_text = self.keyword_entry.get("1.0", tk.END).strip()
         filename = self.filename_entry.get().strip()
-        
-        if not keyword:
-            messagebox.showerror("Error", "Ingresa una palabra clave")
+
+        if not keywords_text:
+            messagebox.showerror("Error", "Ingresa al menos una palabra clave")
+            return
+
+        # Parsear keywords
+        keywords = parse_keywords(keywords_text)
+
+        if not keywords:
+            messagebox.showerror("Error", "Ingresa al menos una palabra clave válida")
             return
             
         # Obtener formato seleccionado
         output_format = self.format_var.get()
         
         if not filename:
-            filename = f"{normalize_filename(keyword)}-data"
+            # Usar la primera keyword para el nombre de archivo
+            filename = f"{normalize_filename(keywords[0])}-data"
         else:
             # Normalizar nombre de archivo
             filename = normalize_filename(filename)
@@ -687,7 +933,17 @@ Pasos para obtener tu API Key:
         if not self.api_key:
             messagebox.showerror("Error", "No se ha cargado la API Key")
             return
-            
+
+        # Validar API Key antes de iniciar
+        if not self.validate_api_key():
+            messagebox.showerror("Error",
+                               "La API Key no es válida o no tiene los permisos necesarios.\n\n"
+                               "Verifica que:\n"
+                               "1. La API Key sea correcta\n"
+                               "2. Places API esté habilitada en tu proyecto\n"
+                               "3. La facturación esté activada")
+            return
+
         # Validar que al menos un campo esté seleccionado
         if not any(var.get() for var in self.field_vars.values()):
             messagebox.showerror("Error", "Selecciona al menos un campo para extraer")
@@ -697,11 +953,11 @@ Pasos para obtener tu API Key:
         self.start_button.config(state='disabled')
         self.stop_button.config(state='normal')
         self.scraped_data = []
-        
-        # Iniciar scraping en hilo separado
-        thread = threading.Thread(target=self.scrape_data, args=(keyword, filename, output_format))
-        thread.daemon = True
-        thread.start()
+
+        # Iniciar scraping en hilo separado con lista de keywords
+        self.scraping_thread = threading.Thread(target=self.scrape_data, args=(keywords, filename, output_format))
+        self.scraping_thread.daemon = True
+        self.scraping_thread.start()
         
     def stop_scraping(self):
         self.is_scraping = False
@@ -715,27 +971,46 @@ Pasos para obtener tu API Key:
         # Detener cualquier scraping en progreso
         if self.is_scraping:
             self.stop_scraping()
-        
+
+            # Esperar a que el thread termine (máximo 5 segundos)
+            if self.scraping_thread and self.scraping_thread.is_alive():
+                self.log("⏳ Esperando a que termine el scraping actual...")
+                self.scraping_thread.join(timeout=5.0)
+
+                if self.scraping_thread.is_alive():
+                    self.log("⚠️ El thread de scraping no terminó, pero se reiniciará la interfaz")
+
+        # Reiniciar variable de thread
+        self.scraping_thread = None
+
         # Limpiar log
         self.log_text.delete(1.0, tk.END)
-        
+
         # Reiniciar barra de progreso
         self.progress_bar['value'] = 0
         self.progress_var.set("Listo para comenzar")
-        
+
         # Limpiar datos scrapeados
         self.scraped_data = []
-        
+
+        # Reiniciar contadores de API
+        self.api_calls_count = 0
+        self.estimated_cost = 0.0
+        self.api_stats_var.set("API Calls: 0 | Costo estimado: $0.00")
+
+        # Limpiar cache de emails
+        self.visited_websites_no_email.clear()
+
         # Reiniciar estado de botones
         self.start_button.config(state='normal')
         self.stop_button.config(state='disabled')
-        
+
         # Actualizar lista de archivos
         self.refresh_json_files()
-        
+
         # Limpiar vista previa
         self.preview_text.delete(1.0, tk.END)
-        
+
         # Log de reinicio
         self.log("🔄 Aplicación reiniciada - Lista para nuevo scraping")
     
@@ -767,56 +1042,101 @@ Pasos para obtener tu API Key:
         return existing_place_ids
     
     def extract_email_from_website(self, website_url):
-        """Extrae emails del sitio web del negocio"""
+        """Extrae emails del sitio web del negocio con búsqueda inteligente"""
+        # Verificar si ya intentamos buscar en esta URL sin éxito
+        if website_url in self.visited_websites_no_email:
+            return None
+
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+        exclude_patterns = [
+            'noreply', 'no-reply', 'donotreply', 'example.com',
+            'test.com', 'gmail.com', 'yahoo.com', 'hotmail.com',
+            'outlook.com', 'facebook.com', 'twitter.com', 'instagram.com'
+        ]
+
+        def filter_emails(emails_list):
+            """Filtra emails no válidos"""
+            filtered = []
+            for email in emails_list:
+                email_lower = email.lower()
+                if not any(pattern in email_lower for pattern in exclude_patterns):
+                    filtered.append(email)
+            return filtered
+
+        def extract_from_soup(soup):
+            """Extrae emails de BeautifulSoup object"""
+            # 1. Buscar mailto: links (más confiable)
+            mailto_links = soup.find_all('a', href=re.compile(r'^mailto:', re.I))
+            if mailto_links:
+                email = mailto_links[0]['href'].replace('mailto:', '').split('?')[0]
+                return email
+
+            # 2. Buscar en footer
+            footer = soup.find('footer')
+            if footer:
+                emails = re.findall(email_pattern, footer.get_text())
+                filtered = filter_emails(emails)
+                if filtered:
+                    return filtered[0]
+
+            # 3. Buscar en elementos con clases de contacto
+            contact_elements = soup.find_all(class_=re.compile(r'contact|email', re.I))
+            for elem in contact_elements:
+                emails = re.findall(email_pattern, elem.get_text())
+                filtered = filter_emails(emails)
+                if filtered:
+                    return filtered[0]
+
+            # 4. Buscar en todo el texto
+            text_content = soup.get_text()
+            emails = re.findall(email_pattern, text_content)
+            filtered = filter_emails(emails)
+            if filtered:
+                return filtered[0]
+
+            return None
+
         try:
-            # Timeout corto para no bloquear el scraping
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-            
+            # Parse base URL
+            from urllib.parse import urlparse, urljoin
+            parsed_url = urlparse(website_url)
+            base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+
+            # 1. Intentar páginas de contacto primero (timeout corto 5s)
+            contact_pages = ['/contact', '/contacto', '/contact-us', '/contactenos', '/en/contact']
+
+            for contact_path in contact_pages:
+                try:
+                    contact_url = urljoin(base_url, contact_path)
+                    response = requests.get(contact_url, headers=headers, timeout=5)
+                    if response.status_code == 200:
+                        soup = BeautifulSoup(response.text, 'html.parser')
+                        email = extract_from_soup(soup)
+                        if email:
+                            return email
+                except:
+                    continue
+
+            # 2. Si no encontró en páginas de contacto, buscar en página principal
             response = requests.get(website_url, headers=headers, timeout=10)
             response.raise_for_status()
-            
-            # Parsear HTML
             soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Buscar emails en el texto de la página
-            text_content = soup.get_text()
-            
-            # Patrón regex para emails
-            email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-            emails = re.findall(email_pattern, text_content)
-            
-            if emails:
-                # Filtrar emails comunes no útiles
-                filtered_emails = []
-                exclude_patterns = [
-                    'noreply', 'no-reply', 'donotreply', 'example.com', 
-                    'test.com', 'gmail.com', 'yahoo.com', 'hotmail.com',
-                    'outlook.com', 'facebook.com', 'twitter.com', 'instagram.com'
-                ]
-                
-                for email in emails:
-                    email_lower = email.lower()
-                    if not any(pattern in email_lower for pattern in exclude_patterns):
-                        filtered_emails.append(email)
-                
-                # Retornar el primer email válido encontrado
-                if filtered_emails:
-                    return filtered_emails[0]
-                elif emails:  # Si no hay emails filtrados, retornar el primero
-                    return emails[0]
-            
-            # Si no se encuentra en el texto, buscar en elementos específicos
-            mailto_links = soup.find_all('a', href=re.compile(r'^mailto:'))
-            if mailto_links:
-                email = mailto_links[0]['href'].replace('mailto:', '')
+            email = extract_from_soup(soup)
+
+            if email:
                 return email
-            
-            return None
-            
+            else:
+                # Agregar a cache de URLs sin email
+                self.visited_websites_no_email.add(website_url)
+                return None
+
         except Exception as e:
-            # No registrar errores para no saturar el log
+            # Agregar a cache en caso de error
+            self.visited_websites_no_email.add(website_url)
             return None
         
     def search_businesses(self, business_name: str) -> List[Dict]:
@@ -849,25 +1169,43 @@ Pasos para obtener tu API Key:
             
             try:
                 response = requests.get(URL_TEXT_SEARCH, params=params, timeout=10)
+
+                # Manejar Rate Limiting (429)
+                if response.status_code == 429:
+                    self.log("⚠️ Rate limit alcanzado en búsqueda. Esperando 60 segundos...")
+                    time.sleep(60)
+                    # Reintentar la misma petición
+                    response = requests.get(URL_TEXT_SEARCH, params=params, timeout=10)
+
                 response.raise_for_status()
                 data = response.json()
+
+                # Incrementar contador de API calls
+                self.increment_api_calls('search')
+
                 results = data.get('results', [])
-                
+
                 for result in results:
                     if result.get('place_id'):
                         all_results.append({
                             'place_id': result.get('place_id'),
                             'name': result.get('name', 'Sin nombre')
                         })
-                
+
                 # Verificar si hay más páginas
                 next_page_token = data.get('next_page_token')
                 if not next_page_token:
                     break
-                    
+
                 # Delay requerido antes de usar next_page_token
                 time.sleep(2)
-                
+
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 403:
+                    self.log(f"❌ Error 403: API Key sin permisos o Places API no habilitada")
+                else:
+                    self.log(f"❌ Error HTTP {e.response.status_code}: {e}")
+                break
             except requests.RequestException as e:
                 self.log(f"⚠️ Error buscando '{business_name}': {e}")
                 break
@@ -898,9 +1236,20 @@ Pasos para obtener tu API Key:
         
         try:
             response = requests.get(URL_PLACE_DETAILS, params=params, timeout=10)
+
+            # Manejar Rate Limiting (429)
+            if response.status_code == 429:
+                self.log("⚠️ Rate limit alcanzado en detalles. Esperando 60 segundos...")
+                time.sleep(60)
+                # Reintentar la misma petición
+                response = requests.get(URL_PLACE_DETAILS, params=params, timeout=10)
+
             response.raise_for_status()
             result = response.json().get('result', {})
-            
+
+            # Incrementar contador de API calls
+            self.increment_api_calls('details')
+
             # Construir objeto con solo los campos seleccionados
             business_data = BusinessData(
                 title=result.get('name', ''),
@@ -914,15 +1263,32 @@ Pasos para obtener tu API Key:
                 price_level=result.get('price_level') if self.field_vars['price_level'].get() else None,
                 email=None  # Se llenará después si está habilitado
             )
-            
+
             return business_data
-            
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 403:
+                self.log(f"❌ Error 403: API Key sin permisos")
+            elif e.response.status_code == 404:
+                self.log(f"⚠️ Place ID no encontrado: {place_id}")
+            else:
+                self.log(f"❌ Error HTTP {e.response.status_code} para '{place_id}'")
+            return None
         except requests.RequestException as e:
             self.log(f"⚠️ Error obteniendo detalles para place_id '{place_id}': {e}")
             return None
             
-    def scrape_data(self, keyword, filename, output_format="json"):
-        self.log(f"🔍 Iniciando scraping para: {keyword}")
+    def scrape_data(self, keywords, filename, output_format="json"):
+        if isinstance(keywords, str):
+            keywords = [keywords]  # Compatibilidad con llamadas antiguas
+
+        total_keywords = len(keywords)
+        if total_keywords == 1:
+            self.log(f"🔍 Iniciando scraping para: {keywords[0]}")
+        else:
+            self.log(f"🔍 Iniciando scraping para {total_keywords} palabras clave")
+            for idx, kw in enumerate(keywords, 1):
+                self.log(f"   {idx}. {kw}")
         
         # Cargar place_ids ya existentes para evitar duplicados
         existing_place_ids = self.load_existing_place_ids(filename, output_format)
@@ -934,37 +1300,71 @@ Pasos para obtener tu API Key:
             limit_str = self.max_results_var.get().strip()
             if limit_str == "":
                 self.log(f"📋 Configurado para extraer TODOS los resultados disponibles")
+                self.log(f"⚠️ Nota: Google Places API limita a 60 resultados por búsqueda")
+                self.log(f"💡 Tip: Para más resultados, usa búsquedas específicas (ej: 'restaurantes Madrid Centro')")
             else:
                 limit_val = int(limit_str)
                 self.log(f"📋 Configurado para extraer hasta {limit_val} resultados")
+                if limit_val > 60:
+                    self.log(f"⚠️ Nota: Google Places API limita a 60 resultados por búsqueda")
+                    self.log(f"💡 Tip: Para más resultados, usa búsquedas específicas por ubicación o tipo")
+                    self.log(f"   Ejemplo: 'restaurantes Madrid Centro', 'restaurantes Madrid Norte', etc.")
         except (ValueError, tk.TclError):
             self.log(f"📋 Configurado para extraer TODOS los resultados disponibles")
+            self.log(f"⚠️ Nota: Google Places API limita a 60 resultados por búsqueda")
         
         self.progress_var.set("Buscando negocios...")
-        
-        # Buscar múltiples negocios
-        all_businesses = self.search_businesses(keyword)
-        if not all_businesses:
-            self.log(f"❌ No se encontraron negocios para '{keyword}'")
-            self.progress_var.set("No se encontraron resultados")
-            self.stop_scraping()
-            return
-        
-        # Filtrar duplicados basándose en place_id
-        businesses = [b for b in all_businesses if b['place_id'] not in existing_place_ids]
-        duplicates_found = len(all_businesses) - len(businesses)
-        
-        if duplicates_found > 0:
-            self.log(f"🔄 Se omitieron {duplicates_found} duplicados ya existentes")
-        
-        if not businesses:
-            self.log(f"ℹ️ Todos los negocios encontrados ya existen en el archivo")
+
+        # Acumular todos los negocios de todas las búsquedas
+        all_businesses_combined = []
+        total_found = 0
+
+        for idx, keyword in enumerate(keywords, 1):
+            if not self.is_scraping:
+                break
+
+            if total_keywords > 1:
+                self.log(f"\n🔎 Búsqueda {idx}/{total_keywords}: '{keyword}'")
+
+            # Buscar negocios para esta keyword
+            keyword_businesses = self.search_businesses(keyword)
+            total_found += len(keyword_businesses)
+
+            if not keyword_businesses:
+                self.log(f"❌ No se encontraron resultados para '{keyword}'")
+                continue
+
+            # Filtrar duplicados
+            new_businesses = [b for b in keyword_businesses if b['place_id'] not in existing_place_ids]
+            duplicates = len(keyword_businesses) - len(new_businesses)
+
+            if duplicates > 0:
+                self.log(f"   📋 Encontrados: {len(keyword_businesses)} negocios ({duplicates} duplicados omitidos)")
+            else:
+                self.log(f"   📋 Encontrados: {len(keyword_businesses)} negocios nuevos")
+
+            # Agregar place_ids nuevos al set para evitar duplicados en siguientes búsquedas
+            for b in new_businesses:
+                existing_place_ids.add(b['place_id'])
+
+            all_businesses_combined.extend(new_businesses)
+
+        if not all_businesses_combined:
+            if total_found == 0:
+                self.log(f"\n❌ No se encontraron negocios para ninguna búsqueda")
+            else:
+                self.log(f"\nℹ️ Todos los negocios encontrados ya existen en el archivo")
             self.progress_var.set("No hay nuevos resultados")
             self.stop_scraping()
             return
-            
-        self.log(f"📋 Se encontraron {len(all_businesses)} negocios totales")
-        self.log(f"✨ {len(businesses)} negocios nuevos para procesar")
+
+        businesses = all_businesses_combined
+
+        self.log(f"\n📊 Resumen de búsquedas:")
+        self.log(f"   Total encontrado: {total_found} negocios")
+        self.log(f"   Nuevos únicos: {len(businesses)} negocios")
+        self.log(f"✨ Procesando {len(businesses)} negocios...")
+
         self.progress_bar.config(maximum=len(businesses))
         self.progress_bar['value'] = 0
         
@@ -995,7 +1395,12 @@ Pasos para obtener tu API Key:
                 
                 self.scraped_data.append(business_data)
                 processed_count += 1
-                
+
+                # Guardar checkpoint cada 10 registros
+                if processed_count % 10 == 0:
+                    self.save_checkpoint(filename, processed_count)
+                    self.log(f"💾 Checkpoint guardado: {processed_count} registros procesados")
+
                 # Mostrar datos extraídos
                 self.log(f"✅ Datos extraídos para '{business_data.title}'")
                 if business_data.phone:
@@ -1050,9 +1455,12 @@ Pasos para obtener tu API Key:
             self.log(f"💾 Datos guardados en: data/{filename}")
             self.log(f"🏁 Completado: {processed_count} negocios nuevos procesados")
             self.log(f"📊 Total en archivo: {total_in_file} negocios")
+
+            # Limpiar checkpoint al finalizar exitosamente
+            self.clear_checkpoint()
         else:
             self.log(f"❌ No se obtuvieron nuevos datos para '{keyword}'")
-            
+
         self.progress_var.set(f"Completado: {processed_count} negocios")
         self.is_scraping = False
         self.start_button.config(state='normal')

@@ -1,6 +1,6 @@
 # ==========================================
 # Proyecto Open Source - Konstantin Koshkarev
-# Los usuarios deben compilar usando build scripts
+# Los usuarios deben compilar usando build_linux.sh
 # NO subir binarios al repositorio
 # ==========================================
 
@@ -8,9 +8,6 @@
 compilado/
 dist/
 build/
-*.exe
-*.app
-*.dmg
 *.spec.backup
 
 # Entorno virtual Python
@@ -25,39 +22,14 @@ __pycache__/
 *$py.class
 *.so
 *.pyo
-.Python
-develop-eggs/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-dist-*/
 
-# API Keys y configuración sensible
+# Configuración sensible y API Keys
 google_api_key.txt
 .gmb_config.enc
 .env
-.env.local
-.env.production
-*.key
-*.secret
-config.json
-secrets.json
 
 # Archivos de datos generados
 data/
-data/*.json
-data/*.csv
-data/*.txt
-!data/README.md
 *.json
 *.csv
 
@@ -67,7 +39,6 @@ data/*.txt
 # Sistema operativo
 .DS_Store
 Thumbs.db
-desktop.ini
 *~
 
 # IDEs

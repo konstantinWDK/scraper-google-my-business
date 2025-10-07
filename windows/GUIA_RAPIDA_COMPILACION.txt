@@ -1,0 +1,114 @@
+╔════════════════════════════════════════════════════════════════════╗
+║  GOOGLE MY BUSINESS SCRAPER - GUÍA RÁPIDA DE COMPILACIÓN WINDOWS  ║
+╚════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ PASO 1: Verifica que tienes Python instalado                       │
+└─────────────────────────────────────────────────────────────────────┘
+
+1. Abre CMD (Win + R, escribe "cmd" y Enter)
+2. Escribe: python --version
+3. Deberías ver algo como: Python 3.x.x
+
+   ❌ Si NO tienes Python:
+   - Descarga desde: https://www.python.org/downloads/
+   - Durante instalación: MARCA "Add Python to PATH"
+   - Reinicia tu PC después de instalar
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ PASO 2: Compila la aplicación                                      │
+└─────────────────────────────────────────────────────────────────────┘
+
+1. Abre el Explorador de Windows
+2. Navega a la carpeta: scraper-google-my-business-windows
+3. HAZ DOBLE CLIC en el archivo: build_windows.bat
+4. Espera 2-5 minutos (verás una ventana negra con el progreso)
+5. Al final verás: "COMPILACIÓN EXITOSA!"
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ PASO 3: Encuentra tu ejecutable                                    │
+└─────────────────────────────────────────────────────────────────────┘
+
+1. Ve a la carpeta: scraper-google-my-business-windows\dist\
+2. Encontrarás: GoogleMyBusinessScraper.exe
+3. Este es tu ejecutable listo para usar
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ PASO 4: Usa tu aplicación                                          │
+└─────────────────────────────────────────────────────────────────────┘
+
+1. Haz doble clic en GoogleMyBusinessScraper.exe
+2. La primera vez puede tardar unos segundos
+3. Verás 2 ventanas:
+   - Una ventana negra (terminal) - NO la cierres
+   - La aplicación gráfica (GUI)
+
+4. Configura tu API Key:
+   - Ve a la pestaña "Configuración"
+   - Pega tu Google Places API Key
+   - Haz clic en "Guardar API Key"
+
+5. ¡Listo! Ya puedes usar el scraper
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ SOLUCIÓN DE PROBLEMAS                                               │
+└─────────────────────────────────────────────────────────────────────┘
+
+❌ Problema: Windows Defender bloquea el ejecutable
+   Solución:
+   - Haz clic derecho en GoogleMyBusinessScraper.exe
+   - Propiedades → General → Desbloquear → Aplicar
+
+❌ Problema: El antivirus elimina el archivo
+   Solución:
+   - Es un falso positivo (común con PyInstaller)
+   - Añade la carpeta a excepciones del antivirus
+
+❌ Problema: La aplicación se cierra inmediatamente
+   Solución:
+   - Verás el error en la ventana de terminal (ventana negra)
+   - Lee el mensaje de error para saber qué pasó
+   - Asegúrate de configurar la API Key
+
+❌ Problema: Error al compilar "Python no está en el PATH"
+   Solución:
+   - Reinstala Python
+   - MARCA la opción "Add Python to PATH"
+   - Reinicia tu PC
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ DISTRIBUCIÓN DEL EJECUTABLE                                         │
+└─────────────────────────────────────────────────────────────────────┘
+
+✅ Puedes copiar GoogleMyBusinessScraper.exe a cualquier PC Windows
+✅ NO necesitas instalar Python en la PC de destino
+✅ NO necesitas instalar ninguna librería
+✅ Es un ejecutable completamente independiente
+
+Solo necesitas:
+- El archivo GoogleMyBusinessScraper.exe
+- Una API Key de Google Places
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ ARCHIVOS QUE PUEDES ELIMINAR DESPUÉS DE COMPILAR                   │
+└─────────────────────────────────────────────────────────────────────┘
+
+Después de compilar exitosamente, puedes eliminar:
+- Carpeta "build" (archivos temporales)
+
+NO elimines:
+- build_windows.bat (por si quieres recompilar)
+- scraper.spec (configuración de compilación)
+- dist/GoogleMyBusinessScraper.exe (tu ejecutable)
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ ¿NECESITAS AYUDA?                                                   │
+└─────────────────────────────────────────────────────────────────────┘
+
+📖 README completo: README.md
+📖 Instrucciones detalladas: INSTRUCCIONES_COMPILACION_WINDOWS.md
+📖 Documentación del proyecto: ../scraper-google-my-business/README.md
+
+═══════════════════════════════════════════════════════════════════════
+Creado por: Konstantin Koshkarev - webdesignerk.com
+═══════════════════════════════════════════════════════════════════════

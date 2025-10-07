@@ -30,6 +30,7 @@ from tkinter import ttk, messagebox, filedialog, scrolledtext
 import json
 import csv
 import os
+import sys
 import threading
 import requests
 import time
@@ -83,8 +84,14 @@ def parse_keywords(text):
 
 def setup_logging():
     """Configura el sistema de logging con rotación de archivos"""
-    # Obtener directorio del script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Obtener directorio del script o ejecutable
+    if getattr(sys, 'frozen', False):
+        # Si está compilado con PyInstaller
+        script_dir = os.path.dirname(sys.executable)
+    else:
+        # Si se ejecuta como script Python
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+    
     log_file = os.path.join(script_dir, 'scraper.log')
 
     # Configurar logging con rotación (max 5 archivos de 1MB cada uno)
@@ -119,8 +126,14 @@ class SecureConfig:
     """Gestión segura de configuración con cifrado"""
 
     def __init__(self):
-        # Usar ruta absoluta basada en el directorio del script
-        script_dir = os.path.dirname(os.path.abspath(__file__))
+        # Usar ruta absoluta basada en el directorio del script o ejecutable
+        if getattr(sys, 'frozen', False):
+            # Si está compilado con PyInstaller
+            script_dir = os.path.dirname(sys.executable)
+        else:
+            # Si se ejecuta como script Python
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+        
         self.config_file = os.path.join(script_dir, DEFAULT_API_KEY_FILE)
         self._key = self._get_machine_key()
         self.fernet = Fernet(self._key)
@@ -713,7 +726,13 @@ Pasos para obtener tu API Key:
 
     def save_checkpoint(self, filename, processed_count):
         """Guarda checkpoint del progreso actual"""
-        script_dir = os.path.dirname(os.path.abspath(__file__))
+        if getattr(sys, 'frozen', False):
+            # Si está compilado con PyInstaller
+            script_dir = os.path.dirname(sys.executable)
+        else:
+            # Si se ejecuta como script Python
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+        
         checkpoint_file = os.path.join(script_dir, '.scraper_checkpoint.json')
 
         checkpoint_data = {
@@ -731,7 +750,13 @@ Pasos para obtener tu API Key:
 
     def clear_checkpoint(self):
         """Elimina el archivo de checkpoint"""
-        script_dir = os.path.dirname(os.path.abspath(__file__))
+        if getattr(sys, 'frozen', False):
+            # Si está compilado con PyInstaller
+            script_dir = os.path.dirname(sys.executable)
+        else:
+            # Si se ejecuta como script Python
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+        
         checkpoint_file = os.path.join(script_dir, '.scraper_checkpoint.json')
 
         try:
@@ -1609,8 +1634,14 @@ combinará los resultados sin duplicados.
         webbrowser.open("https://webdesignerk.com")
 
 def main():
-    # Cambiar al directorio del script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Cambiar al directorio del script o ejecutable
+    if getattr(sys, 'frozen', False):
+        # Si está compilado con PyInstaller
+        script_dir = os.path.dirname(sys.executable)
+    else:
+        # Si se ejecuta como script Python
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+    
     os.chdir(script_dir)
     
     root = tk.Tk()

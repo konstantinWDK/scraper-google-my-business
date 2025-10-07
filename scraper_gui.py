@@ -25,7 +25,7 @@ import base64
 import hashlib
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import platform
 
 def normalize_filename(filename):
@@ -64,8 +64,8 @@ class SecureConfig:
         # Obtener un identificador único de la máquina
         machine_id = platform.node() + platform.system() + os.path.expanduser("~")
 
-        # Derivar una clave de cifrado usando PBKDF2
-        kdf = PBKDF2(
+        # Derivar una clave de cifrado usando PBKDF2HMAC
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=b'gmb_scraper_salt_v1',  # Salt fijo para consistencia

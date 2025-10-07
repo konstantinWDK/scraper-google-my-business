@@ -1075,62 +1075,100 @@ combinará los resultados sin duplicados.
         return existing_place_ids
     
     def extract_email_from_website(self, website_url):
-        """Extrae emails del sitio web del negocio con búsqueda inteligente"""
+        """Extrae emails del sitio web del negocio con búsqueda inteligente mejorada"""
         # Verificar si ya intentamos buscar en esta URL sin éxito
         if website_url in self.visited_websites_no_email:
             return None
 
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
 
-        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+        # Patrón de email mejorado que incluye más TLDs
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,10}\b'
+        
+        # Filtros menos restrictivos - solo excluir emails claramente no válidos
         exclude_patterns = [
-            'noreply', 'no-reply', 'donotreply', 'example.com',
-            'test.com', 'gmail.com', 'yahoo.com', 'hotmail.com',
-            'outlook.com', 'facebook.com', 'twitter.com', 'instagram.com'
+            'noreply', 'no-reply', 'donotreply', 'example.com', 'test.com',
+            'placeholder', 'yourname', 'youremail', 'sample', 'demo'
         ]
 
         def filter_emails(emails_list):
-            """Filtra emails no válidos"""
+            """Filtra emails no válidos con criterios menos restrictivos"""
             filtered = []
             for email in emails_list:
                 email_lower = email.lower()
+                # Solo excluir si contiene patrones claramente no válidos
                 if not any(pattern in email_lower for pattern in exclude_patterns):
-                    filtered.append(email)
+                    # Validar que tenga formato básico correcto
+                    if '@' in email and '.' in email.split('@')[1]:
+                        filtered.append(email)
             return filtered
 
         def extract_from_soup(soup):
-            """Extrae emails de BeautifulSoup object"""
+            """Extrae emails de BeautifulSoup object con estrategias mejoradas"""
+            found_emails = []
+            
             # 1. Buscar mailto: links (más confiable)
             mailto_links = soup.find_all('a', href=re.compile(r'^mailto:', re.I))
-            if mailto_links:
-                email = mailto_links[0]['href'].replace('mailto:', '').split('?')[0]
-                return email
+            for link in mailto_links:
+                email = link['href'].replace('mailto:', '').split('?')[0].split('&')[0]
+                found_emails.append(email)
 
-            # 2. Buscar en footer
-            footer = soup.find('footer')
-            if footer:
-                emails = re.findall(email_pattern, footer.get_text())
-                filtered = filter_emails(emails)
-                if filtered:
-                    return filtered[0]
+            # 2. Buscar en elementos específicos de contacto (prioridad alta)
+            contact_selectors = [
+                'footer', '.footer', '#footer',
+                '.contact', '#contact', '.contact-info', '.contact-details',
+                '.email', '.email-address', '.mail',
+                '.info', '.information', '.datos-contacto',
+                'address', '.address', '.direccion'
+            ]
+            
+            for selector in contact_selectors:
+                try:
+                    elements = soup.select(selector)
+                    for elem in elements:
+                        emails = re.findall(email_pattern, elem.get_text())
+                        found_emails.extend(emails)
+                except:
+                    continue
 
-            # 3. Buscar en elementos con clases de contacto
-            contact_elements = soup.find_all(class_=re.compile(r'contact|email', re.I))
-            for elem in contact_elements:
-                emails = re.findall(email_pattern, elem.get_text())
-                filtered = filter_emails(emails)
-                if filtered:
-                    return filtered[0]
+            # 3. Buscar en meta tags y structured data
+            meta_tags = soup.find_all('meta', attrs={'name': re.compile(r'email|contact', re.I)})
+            for meta in meta_tags:
+                content = meta.get('content', '')
+                emails = re.findall(email_pattern, content)
+                found_emails.extend(emails)
 
-            # 4. Buscar en todo el texto
-            text_content = soup.get_text()
-            emails = re.findall(email_pattern, text_content)
-            filtered = filter_emails(emails)
+            # 4. Buscar en JSON-LD structured data
+            json_scripts = soup.find_all('script', type='application/ld+json')
+            for script in json_scripts:
+                try:
+                    data = json.loads(script.string)
+                    if isinstance(data, dict):
+                        # Buscar email en diferentes campos
+                        for key in ['email', 'contactPoint', 'contact']:
+                            if key in data:
+                                if isinstance(data[key], str):
+                                    emails = re.findall(email_pattern, data[key])
+                                    found_emails.extend(emails)
+                except:
+                    continue
+
+            # 5. Buscar en texto completo (última opción)
+            if not found_emails:
+                text_content = soup.get_text()
+                emails = re.findall(email_pattern, text_content)
+                found_emails.extend(emails)
+
+            # Filtrar y devolver el mejor email
+            filtered = filter_emails(found_emails)
             if filtered:
-                return filtered[0]
-
+                # Priorizar emails que no sean de servicios gratuitos
+                business_emails = [e for e in filtered if not any(domain in e.lower() 
+                                 for domain in ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com'])]
+                return business_emails[0] if business_emails else filtered[0]
+            
             return None
 
         try:
@@ -1139,37 +1177,49 @@ combinará los resultados sin duplicados.
             parsed_url = urlparse(website_url)
             base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
 
-            # 1. Intentar páginas de contacto primero (timeout corto 5s)
-            contact_pages = ['/contact', '/contacto', '/contact-us', '/contactenos', '/en/contact']
+            # 1. Intentar páginas de contacto ampliadas (timeout 8s)
+            contact_pages = [
+                '/contact', '/contacto', '/contact-us', '/contactenos', '/en/contact',
+                '/contact.html', '/contacto.html', '/contact.php', '/contacto.php',
+                '/about', '/sobre-nosotros', '/about-us', '/acerca-de',
+                '/info', '/informacion', '/information',
+                '/team', '/equipo', '/staff', '/personal'
+            ]
 
+            self.log(f"   🔍 Buscando email en páginas de contacto...")
             for contact_path in contact_pages:
                 try:
                     contact_url = urljoin(base_url, contact_path)
-                    response = requests.get(contact_url, headers=headers, timeout=5)
+                    response = requests.get(contact_url, headers=headers, timeout=8)
                     if response.status_code == 200:
                         soup = BeautifulSoup(response.text, 'html.parser')
                         email = extract_from_soup(soup)
                         if email:
+                            self.log(f"   ✅ Email encontrado en {contact_path}: {email}")
                             return email
                 except:
                     continue
 
-            # 2. Si no encontró en páginas de contacto, buscar en página principal
-            response = requests.get(website_url, headers=headers, timeout=10)
+            # 2. Buscar en página principal con análisis más profundo
+            self.log(f"   🔍 Buscando email en página principal...")
+            response = requests.get(website_url, headers=headers, timeout=12)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
             email = extract_from_soup(soup)
 
             if email:
+                self.log(f"   ✅ Email encontrado en página principal: {email}")
                 return email
             else:
                 # Agregar a cache de URLs sin email
                 self.visited_websites_no_email.add(website_url)
+                self.log(f"   ❌ No se encontró email válido en {website_url}")
                 return None
 
         except Exception as e:
             # Agregar a cache en caso de error
             self.visited_websites_no_email.add(website_url)
+            self.log(f"   ⚠️ Error extrayendo email de {website_url}: {str(e)[:100]}")
             return None
         
     def search_businesses(self, business_name: str) -> List[Dict]:

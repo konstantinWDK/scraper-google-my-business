@@ -914,9 +914,17 @@ combinará los resultados sin duplicados.
         if dest:
             try:
                 filepath = os.path.join('data', filename)
-                with open(filepath, 'r', encoding='utf-8') as src:
-                    with open(dest, 'w', encoding='utf-8') as dst:
-                        dst.write(src.read())
+                # Determinar la codificación apropiada según el tipo de archivo
+                if dest.lower().endswith('.csv'):
+                    # Para archivos CSV, usar UTF-8 con BOM para compatibilidad con Excel
+                    with open(filepath, 'r', encoding='utf-8') as src:
+                        with open(dest, 'w', encoding='utf-8-sig', newline='') as dst:
+                            dst.write(src.read())
+                else:
+                    # Para otros archivos (JSON), usar UTF-8 estándar
+                    with open(filepath, 'r', encoding='utf-8') as src:
+                        with open(dest, 'w', encoding='utf-8') as dst:
+                            dst.write(src.read())
                 messagebox.showinfo("Éxito", f"Archivo exportado a {dest}")
             except Exception as e:
                 messagebox.showerror("Error", f"Error al exportar: {e}")
@@ -1591,13 +1599,13 @@ combinará los resultados sin duplicados.
         # Si merge_with_existing=True y el archivo existe, anexar datos
         if merge_with_existing and os.path.exists(filepath):
             # Anexar al archivo existente
-            with open(filepath, 'a', newline='', encoding='utf-8') as csvfile:
+            with open(filepath, 'a', newline='', encoding='utf-8-sig') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 for row in new_rows:
                     writer.writerow(row)
         else:
             # Escribir archivo CSV nuevo
-            with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+            with open(filepath, 'w', newline='', encoding='utf-8-sig') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
                 for row in new_rows:

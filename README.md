@@ -1,13 +1,33 @@
-# Google My Business Scraper v1.1.0
+# Google My Business Scraper v1.4.0
 
 Extrae datos de perfiles de Google My Business utilizando la API de Google Places con interfaz gráfica amigable.
 
-## 🆕 Novedades en v1.1.0
+## 🆕 Novedades en v1.4.0
 
-- ✅ **Guardado seguro de API Key**: Tu API Key ahora se guarda cifrada con AES-256
-- ✅ **Persistencia automática**: La API Key se carga automáticamente al iniciar
-- ✅ **Cifrado multiplataforma**: Compatible con Windows y Linux
-- ✅ **Compatibilidad retroactiva**: Detecta y migra archivos legacy automáticamente
+- ✅ **Compatibilidad con PyInstaller mejorada**: Corregidos problemas de persistencia de API Key y ubicación de archivos en ejecutables compilados
+- ✅ **Codificación CSV mejorada**: Solucionado problema de caracteres especiales (ej: "Ã­" → "í") con UTF-8 BOM para Excel
+- ✅ **Sistema de extracción de emails renovado**: Búsqueda en 14 páginas diferentes, filtros menos restrictivos, estrategias mejoradas
+- ✅ **Robustez del sistema de archivos**: Mejor detección de directorio de trabajo y rutas absolutas consistentes
+
+## 🔄 Historial de Versiones
+
+### v1.3.0 - Búsquedas Múltiples Automáticas
+- **Búsquedas múltiples**: Campo multilínea para procesar múltiples keywords automáticamente
+- **Superar límite de 60 resultados**: Hasta 60 resultados por keyword sin límite de keywords
+- **Anti-duplicados mejorado**: Detecta duplicados entre múltiples búsquedas
+- **Logs detallados**: Progreso y estadísticas de búsquedas múltiples
+
+### v1.2.0 - Logging y Validación
+- **Sistema de logging**: Archivo `scraper.log` con rotación automática
+- **Validación de API Key**: Verifica validez antes de iniciar scraping
+- **Contador de costos**: API calls y costos en tiempo real
+- **Sistema de Checkpoint**: Guarda progreso cada 10 registros
+- **Manejo de Rate Limiting**: Reintentos automáticos en HTTP 429
+
+### v1.1.0 - Seguridad y Persistencia
+- **Guardado seguro de API Key**: Cifrada con AES-256 y persistencia automática
+- **Pestaña de Configuración**: Gestión visual de API Key
+- **Compatibilidad retroactiva**: Migración automática de archivos legacy
 
 ## 📸 Capturas de Pantalla
 
@@ -25,13 +45,20 @@ Extrae datos de perfiles de Google My Business utilizando la API de Google Place
 - **Múltiples formatos de salida**: JSON y CSV a elección
 - **Detección automática de duplicados**: Evita scraping redundante comparando place_ids
 - **Scraping incremental**: Continúa desde donde lo dejaste sin duplicar datos
+- **Búsquedas múltiples automáticas**: Procesa múltiples keywords en una sola ejecución (v1.3.0+)
 - **Múltiples resultados**: Extrae todos los negocios disponibles o limita la cantidad
 - **Campos configurables**: Elige qué datos extraer (teléfono, sitio web, dirección, etc.)
 - **Control de velocidad**: Evita límites de API con delays configurables
 - **Gestión de archivos**: Ve, elimina y exporta archivos JSON y CSV
+- **Sistema de logging**: Archivo de log con rotación automática (v1.2.0+)
+- **Validación de API Key**: Verifica la clave antes de iniciar (v1.2.0+)
+- **Contador de costos**: Muestra API calls y costos en tiempo real (v1.2.0+)
+- **Sistema de Checkpoint**: Guarda progreso cada 10 registros (v1.2.0+)
+- **Extracción de emails mejorada**: Búsqueda inteligente en múltiples páginas (v1.4.0+)
 - **Botón de reinicio**: Limpia la interfaz para empezar fresco
 - **🔐 Seguridad mejorada**: API Key cifrada con AES-256 y persistencia automática
 - **Configuración visual**: Gestiona tu API Key desde la interfaz gráfica
+- **Compatibilidad con ejecutables**: Funciona correctamente en versiones compiladas (v1.4.0+)
 
 ## 📊 Datos Extraídos
 
@@ -41,6 +68,7 @@ Extrae datos de perfiles de Google My Business utilizando la API de Google Place
 - 📍 **Dirección**: Dirección completa
 - ⭐ **Rating**: Calificación promedio
 - 👥 **Total Reseñas**: Número de reseñas
+- 📧 **Email**: Extracción inteligente desde sitio web (mejorado en v1.4.0)
 - 🆔 **Place ID**: Identificador único (opcional)
 - 🕒 **Horarios**: Horarios de apertura (opcional)
 - 💰 **Nivel de Precios**: Escala de precios (opcional)
@@ -132,24 +160,26 @@ python3 scraper_gui.py
 El botón **"Reiniciar"** (naranja) te permite:
 - Detener cualquier scraping en progreso
 - Limpiar el log de actividad
-- Reiniciar la barra de progreso
+- Reiniciar la barra de progreso y contadores
 - Preparar la interfaz para un nuevo scraping
 - Actualizar la lista de archivos
+- Limpiar cache de emails y contadores de API (v1.2.0+)
 
 ### Pestaña Scraper
-1. **Palabra clave**: Introduce el término de búsqueda (ej: "museos en madrid")
+1. **Palabras clave**: Introduce términos de búsqueda (una por línea para búsquedas múltiples - v1.3.0+)
 2. **Nombre archivo**: Nombre del archivo (opcional, se auto-genera)
-3. **Formato**: Elige entre JSON o CSV
-4. **Campos**: Selecciona qué datos extraer
+3. **Formato**: Elige entre JSON o CSV (con codificación mejorada - v1.4.0+)
+4. **Campos**: Selecciona qué datos extraer (incluye email mejorado - v1.4.0+)
 5. **Configuración API**: Ajusta velocidad y límites
-6. **Máx resultados**: Número máximo (vacío = todos)
+6. **Máx resultados**: Número máximo por keyword (vacío = todos)
 7. **Controles**: Iniciar, Detener y Reiniciar scraping
+8. **Contador de costos**: Muestra API calls y costos en tiempo real (v1.2.0+)
 
 ### Pestaña Gestión de Archivos
 - **Ver archivos**: Lista todos los archivos generados (JSON y CSV)
 - **Vista previa**: Examina el contenido (formato tabla para CSV)
 - **Eliminar**: Borra archivos innecesarios
-- **Exportar**: Guarda en otra ubicación manteniendo el formato
+- **Exportar**: Guarda en otra ubicación manteniendo el formato y codificación
 
 ### 🆕 Pestaña Configuración (v1.1.0+)
 - **Guardar API Key**: Guarda tu clave cifrada de forma segura
@@ -157,6 +187,7 @@ El botón **"Reiniciar"** (naranja) te permite:
 - **Mostrar/Ocultar**: Toggle para ver la API Key en texto plano
 - **Limpiar**: Elimina la API Key guardada
 - **Estado visual**: Indica si la API Key está configurada correctamente
+- **Compatibilidad mejorada**: Funciona correctamente en ejecutables (v1.4.0+)
 
 ## ⚙️ Configuración de API
 
@@ -203,17 +234,27 @@ scraper-google-my-business/
 ## 🎯 Ejemplos de Uso
 
 ### Buscar todos los museos de una ciudad
-- **Palabra clave**: `"museos en valencia"`
+- **Palabras clave**: `museos en valencia`
 - **Máx resultados**: `(vacío)`
 - **Archivo**: `museos-valencia`
 
+### Búsquedas múltiples automáticas (v1.3.0+)
+- **Palabras clave**: 
+  ```
+  restaurantes japoneses madrid
+  restaurantes italianos madrid
+  pizzerías madrid
+  ```
+- **Máx resultados**: `20` (por keyword = hasta 60 resultados únicos)
+- **Archivo**: `restaurantes-madrid-multiple`
+
 ### Buscar restaurantes específicos
-- **Palabra clave**: `"restaurantes japoneses madrid"`
+- **Palabras clave**: `restaurantes japoneses madrid`
 - **Máx resultados**: `15`
-- **Campos**: Título, Teléfono, Dirección, Rating
+- **Campos**: Título, Teléfono, Dirección, Rating, Email
 
 ### Buscar tiendas de una marca
-- **Palabra clave**: `"zara españa"`
+- **Palabras clave**: `zara españa`
 - **Máx resultados**: `30`
 - **Campos**: Todos los campos
 
@@ -296,17 +337,43 @@ titulo,telefono,sitio_web,direccion,rating,total_ratings,place_id
 - **direccion**: Dirección completa con código postal y país
 - **rating**: Calificación promedio (1.0 - 5.0)
 - **total_ratings**: Número total de reseñas de usuarios
+- **email**: Email de contacto extraído del sitio web (mejorado en v1.4.0)
 - **place_id**: Identificador único de Google Places (usado para detectar duplicados)
 - **horarios**: Array de horarios semanales en formato string (opcional)
 - **nivel_precios**: Escala de precios 0-4 (0=gratis, 4=muy caro) (opcional)
 
-## 🆘 Solución de Problemas
+## 🔧 Solución de Problemas
 
-### Error de API Key
-```
-❌ No se encontró API Key
-```
-**Solución**: Configura la API key usando una de las opciones mencionadas arriba.
+### ❌ Error de API Key
+- **Problema**: "Invalid API key" o "API key not found"
+- **Solución**: Verifica que tu API Key esté correctamente configurada en la pestaña Configuración
+- **Validación automática**: El sistema valida la API Key antes de iniciar (v1.2.0+)
+
+### 🐌 Scraping muy lento
+- **Problema**: El proceso tarda mucho tiempo
+- **Solución**: Ajusta el delay entre requests (mínimo 1 segundo recomendado)
+- **Monitoreo**: Usa el contador de costos para ver el progreso en tiempo real (v1.2.0+)
+
+### 📧 No se encuentran emails
+- **Problema**: El campo email aparece vacío
+- **Solución**: 
+  - Verifica que el sitio web tenga información de contacto visible
+  - El sistema mejorado busca en múltiples páginas y elementos (v1.4.0+)
+  - Revisa los logs para ver detalles del proceso de extracción
+  - Algunos sitios pueden no tener emails públicos disponibles
+
+### 📄 Problemas con archivos CSV
+- **Problema**: Caracteres especiales no se muestran correctamente
+- **Solución**: Los archivos ahora usan codificación UTF-8 con BOM para mejor compatibilidad (v1.4.0+)
+
+### 🔄 Duplicados en resultados
+- **Problema**: Aparecen negocios repetidos
+- **Solución**: El sistema detecta automáticamente duplicados por Place ID
+- **Búsquedas múltiples**: Los duplicados se eliminan automáticamente entre keywords (v1.3.0+)
+
+### 💾 Problemas con ejecutables
+- **Problema**: Errores al usar la versión .exe
+- **Solución**: Compatibilidad mejorada con PyInstaller y manejo robusto de archivos (v1.4.0+)
 
 ### No se encuentran resultados
 ```

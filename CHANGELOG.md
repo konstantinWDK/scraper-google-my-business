@@ -7,6 +7,60 @@ y este proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ---
 
+## [1.4.0] - 2025-01-XX
+
+### 🔧 Arreglado
+- **Compatibilidad con PyInstaller mejorada**
+  - Corregido problema de persistencia de API Key en ejecutables compilados
+  - Arreglada ubicación de archivos generados en ejecutables
+  - Solucionado problema de rutas de archivos en entornos compilados
+  - Funciones afectadas: `SecureConfig.__init__`, `setup_logging`, `save_checkpoint`, `clear_checkpoint`, `main`
+  - Detección automática de entorno compilado vs desarrollo
+
+- **Codificación CSV mejorada**
+  - Corregido problema de caracteres especiales en archivos CSV (ej: "Ã­" → "í")
+  - Implementado UTF-8 with BOM (`utf-8-sig`) para compatibilidad con Excel
+  - Afecta tanto guardado como exportación de archivos CSV
+  - Mantiene UTF-8 estándar para archivos JSON
+
+- **Sistema de extracción de emails completamente renovado**
+  - **Búsqueda ampliada en páginas de contacto**: Ahora busca en 14 variaciones diferentes
+    - Páginas básicas: `/contact`, `/contacto`, `/contact-us`, `/contactenos`, `/en/contact`
+    - Extensiones: `.html`, `.php` para páginas de contacto
+    - Páginas adicionales: `/about`, `/sobre-nosotros`, `/info`, `/team`, `/equipo`
+  - **Filtros menos restrictivos**: Ya no excluye automáticamente Gmail, Yahoo, Hotmail
+    - Solo excluye emails claramente no válidos: `noreply`, `example.com`, `placeholder`
+    - Permite capturar emails legítimos de negocios que usan servicios gratuitos
+  - **Estrategias de búsqueda mejoradas**:
+    - Prioridad 1: Enlaces `mailto:` (más confiables)
+    - Prioridad 2: Elementos específicos de contacto (footer, .contact, .email, etc.)
+    - Prioridad 3: Meta tags y datos estructurados JSON-LD
+    - Prioridad 4: Búsqueda en texto completo
+  - **Priorización inteligente**: Prefiere emails corporativos sobre servicios gratuitos
+  - **Timeouts optimizados**: 8s para páginas de contacto, 12s para página principal
+  - **Logging detallado**: Muestra exactamente dónde encuentra cada email
+  - **Patrón de email mejorado**: Acepta TLDs de hasta 10 caracteres
+
+### ⚡ Mejorado
+- **Robustez del sistema de archivos**
+  - Mejor detección de directorio de trabajo en ejecutables
+  - Rutas absolutas consistentes en todas las operaciones de archivo
+  - Compatibilidad mejorada entre desarrollo y producción
+
+- **Experiencia de usuario**
+  - Logs más informativos durante extracción de emails
+  - Mejor feedback sobre el progreso de búsqueda de emails
+  - Indicadores visuales claros de éxito/fallo en extracción
+
+### 🔧 Técnico
+- Implementada detección de `sys.frozen` para entornos PyInstaller
+- Uso de `sys.executable` para determinar directorio base en ejecutables
+- Codificación `utf-8-sig` implementada en `save_data_to_csv()` y `export_file()`
+- Refactorización completa de `extract_email_from_website()` con nuevas estrategias
+- Mejoras en manejo de excepciones para operaciones de archivo
+
+---
+
 ## [1.3.0] - 2025-10-07
 
 ### 🆕 Añadido

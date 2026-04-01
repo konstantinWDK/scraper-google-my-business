@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-# Google My Business Scraper v1.3.0
+# Google My Business Scraper v1.3.1
+# Cambios en v1.3.1:
+# - Organización de archivos en subcarpetas dentro de data/
+# - Mejora en la visualización de archivos en la GUI
+#
 # Cambios en v1.3.0:
 # - Búsquedas múltiples automáticas (campo multilínea)
 # - Superar límite de 60 resultados con múltiples keywords
@@ -120,7 +124,7 @@ def setup_logging():
 DEFAULT_API_KEY_FILE = '.gmb_config.enc'  # Archivo cifrado
 URL_TEXT_SEARCH = 'https://maps.googleapis.com/maps/api/place/textsearch/json'
 URL_PLACE_DETAILS = 'https://maps.googleapis.com/maps/api/place/details/json'
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.1"
 
 class SecureConfig:
     """Gestión segura de configuración con cifrado"""

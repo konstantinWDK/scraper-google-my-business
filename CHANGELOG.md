@@ -10,6 +10,28 @@ y este proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 ## [1.4.0] - 2025-01-XX
 
 ### 🔧 Arreglado
+...
+
+---
+
+## [1.3.1] - 2026-04-01
+
+### 🆕 Añadido
+- **Organización de archivos en subcarpetas**
+  - Cada archivo (.json/.csv) se guarda ahora en una subcarpeta dedicada en `data/`
+  - La subcarpeta toma el nombre del archivo (ej: `data/mi-busqueda/mi-busqueda.json`)
+  - Mejora la organización y evita el desorden en la carpeta raíz de datos
+
+### ⚡ Mejorado
+- **Gestión de archivos en la GUI**
+  - El listado de archivos ahora es recursivo, detectando archivos en subcarpetas
+  - Compatibilidad completa con funciones de vista previa, eliminación y exportación
+
+### 🔧 Arreglado
+- **Script de lanzamiento Linux**
+  - Corregido problema de finales de línea (CRLF a LF) en `launch_gui.sh`
+
+### 🔧 Arreglado
 - **Compatibilidad con PyInstaller mejorada**
   - Corregido problema de persistencia de API Key en ejecutables compilados
   - Arreglada ubicación de archivos generados en ejecutables

@@ -818,7 +818,15 @@ combinará los resultados sin duplicados.
             data_dir = 'data'
             if not os.path.exists(data_dir):
                 os.makedirs(data_dir)
-            files = [f for f in os.listdir(data_dir) if f.endswith(('.json', '.csv'))]
+            # Listar archivos en data y sus subcarpetas
+            files = []
+            for root, dirs, filenames in os.walk(data_dir):
+                for f in filenames:
+                    if f.endswith(('.json', '.csv')):
+                        # Obtener ruta relativa desde 'data/'
+                        rel_path = os.path.relpath(os.path.join(root, f), data_dir)
+                        files.append(rel_path)
+            
             for file in sorted(files):
                 self.files_listbox.insert(tk.END, file)
         except Exception as e:
@@ -1049,7 +1057,9 @@ combinará los resultados sin duplicados.
     
     def load_existing_place_ids(self, filename, output_format):
         """Carga place_ids existentes del archivo para evitar duplicados"""
-        filepath = os.path.join('data', filename)
+        # El archivo ahora está en data/nombre-archivo/nombre-archivo.ext
+        folder = os.path.splitext(filename)[0]
+        filepath = os.path.join('data', folder, filename)
         existing_place_ids = set()
         
         if not os.path.exists(filepath):
@@ -1528,14 +1538,17 @@ combinará los resultados sin duplicados.
         
         # Guardar todos los datos (combinando con existentes)
         if self.scraped_data:
-            filepath = os.path.join('data', filename)
+            # El archivo se guarda en data/nombre-archivo/nombre-archivo.ext
+            folder = os.path.splitext(filename)[0]
+            filepath = os.path.join('data', folder, filename)
             if output_format == "csv":
                 self.save_data_to_csv(filepath, merge_with_existing=True)
             else:
                 self.save_data_to_json(filepath, merge_with_existing=True)
             
             total_in_file = len(existing_place_ids) + processed_count
-            self.log(f"💾 Datos guardados en: data/{filename}")
+            folder = os.path.splitext(filename)[0]
+            self.log(f"💾 Datos guardados en: data/{folder}/{filename}")
             self.log(f"🏁 Completado: {processed_count} negocios nuevos procesados")
             self.log(f"📊 Total en archivo: {total_in_file} negocios")
 

@@ -210,8 +210,9 @@ class GoogleMyBusinessScraperGUI:
     def __init__(self, root):
         self.root = root
         self.root.title(f"Google My Business Scraper v{APP_VERSION}")
-        self.root.geometry("900x700")
-        self.root.configure(bg='#f0f0f0')
+        self.root.geometry("1000x850")
+        self.root.configure(bg='#fcfcfc')
+        self.root.minsize(900, 750)
 
         # Variables
         self.api_key = None
@@ -226,14 +227,46 @@ class GoogleMyBusinessScraperGUI:
         # Inicializar logger
         self.logger = setup_logging()
 
+        self.setup_styles()
         self.setup_ui()
         self.load_api_key()
         self.refresh_json_files()
         
+    def setup_styles(self):
+        style = ttk.Style()
+        # Intentar usar un tema más moderno según el OS
+        available_themes = style.theme_names()
+        if 'clam' in available_themes:
+            style.theme_use('clam')
+        
+        # Colores modernos
+        self.bg_color = '#fcfcfc'
+        self.primary_color = '#4361ee'
+        self.secondary_color = '#3f37c9'
+        self.success_color = '#4cc9f0'
+        self.danger_color = '#e63946'
+        self.warning_color = '#ffb703'
+        self.text_color = '#2b2d42'
+        
+        # Estilo para Notebook
+        style.configure('TNotebook', background=self.bg_color, padding=5)
+        style.configure('TNotebook.Tab', padding=[15, 5], font=('Segoe UI', 10, 'bold'))
+        
+        # Estilo para LabelFrames
+        style.configure('TLabelframe', background=self.bg_color, relief='groove', borderwidth=1)
+        style.configure('TLabelframe.Label', background=self.bg_color, foreground=self.primary_color, 
+                        font=('Segoe UI', 10, 'bold'))
+        
+        # Estilo para Frames
+        style.configure('TFrame', background=self.bg_color)
+        
+        # Estilo para Botones (personalización limitada en ttk estándar)
+        style.configure('TButton', font=('Segoe UI', 10))
+        
     def setup_ui(self):
         # Frame principal con pestañas
         notebook = ttk.Notebook(self.root)
-        notebook.pack(fill='both', expand=True, padx=10, pady=10)
+        notebook.pack(fill='both', expand=True, padx=5, pady=5)
         
         # Pestaña de scraping
         self.scraping_frame = ttk.Frame(notebook)
@@ -284,9 +317,13 @@ class GoogleMyBusinessScraperGUI:
                                    values=["json", "csv"], state="readonly", width=8)
         format_combo.grid(row=1, column=3, sticky='w', pady=5)
         
-        # Frame para campos a extraer
-        fields_frame = ttk.LabelFrame(self.scraping_frame, text="Campos a Extraer", padding=10)
-        fields_frame.pack(fill='x', padx=10, pady=5)
+        # Contenedor para opciones (Campos y API uno al lado del otro)
+        options_container = ttk.Frame(self.scraping_frame)
+        options_container.pack(fill='x', padx=10, pady=5)
+        
+        # Frame para campos a extraer (Izquierda)
+        fields_frame = ttk.LabelFrame(options_container, text="Campos a Extraer", padding=10)
+        fields_frame.pack(side='left', fill='both', expand=True, padx=(0,5))
         
         # Checkboxes para campos
         self.field_vars = {
@@ -311,128 +348,133 @@ class GoogleMyBusinessScraperGUI:
             'rating': 'Rating',
             'total_ratings': 'Total Reseñas',
             'opening_hours': 'Horarios',
-            'price_level': 'Nivel de Precios',
-            'email': 'Email (desde web)'
+            'price_level': 'Precios',
+            'email': 'Email (@)'
         }
+        
+        field_grid = tk.Frame(fields_frame, bg=self.bg_color)
+        field_grid.pack(fill='both', expand=True)
         
         row = 0
         col = 0
         for field, var in self.field_vars.items():
-            cb = tk.Checkbutton(fields_frame, text=field_labels[field], variable=var)
+            cb = tk.Checkbutton(field_grid, text=field_labels[field], variable=var, 
+                                bg=self.bg_color, activebackground=self.bg_color,
+                                font=('Segoe UI', 9))
             if field == 'email':
-                cb.config(fg='#FF6600')  # Color naranja para indicar que es experimental
-            cb.grid(row=row, column=col, sticky='w', padx=10, pady=2)
+                cb.config(fg=self.warning_color)
+            cb.grid(row=row, column=col, sticky='w', padx=5, pady=1)
             col += 1
-            if col > 2:
+            if col > 1:  # 2 columnas para que sea más compacto lateralmente
                 col = 0
                 row += 1
         
         # Advertencia para email
-        email_warning = tk.Label(fields_frame, text="⚠️ Email: Función experimental, puede ser lenta", 
-                                fg='#FF6600', font=('Arial', 8))
-        email_warning.grid(row=row+1, column=0, columnspan=3, sticky='w', padx=10, pady=2)
+        email_warning = tk.Label(fields_frame, text="⚠️ Email: Experimental", 
+                                fg=self.warning_color, font=('Segoe UI', 8), bg=self.bg_color)
+        email_warning.pack(anchor='w', padx=5)
         
-        # Frame para configuración de API
-        api_frame = ttk.LabelFrame(self.scraping_frame, text="Configuración de API", padding=10)
-        api_frame.pack(fill='x', padx=10, pady=5)
+        # Frame para configuración de API (Derecha)
+        api_frame = ttk.LabelFrame(options_container, text="Configuración de API (Google Places)", padding=10)
+        api_frame.pack(side='right', fill='both', expand=True, padx=(5,0))
+        
+        api_grid = tk.Frame(api_frame, bg=self.bg_color)
+        api_grid.pack(fill='both', expand=True)
         
         # Controles de velocidad
-        tk.Label(api_frame, text="Delay entre peticiones (seg):").grid(row=0, column=0, sticky='w', pady=2)
+        tk.Label(api_grid, text="Delay (seg):", bg=self.bg_color, font=('Segoe UI', 9)).grid(row=0, column=0, sticky='w', pady=1)
         self.min_delay_var = tk.DoubleVar(value=1.5)
         self.max_delay_var = tk.DoubleVar(value=3.0)
         
-        tk.Label(api_frame, text="Mín:").grid(row=0, column=1, sticky='w', padx=(10,0))
-        tk.Spinbox(api_frame, from_=0.5, to=10.0, increment=0.5, width=8, 
-                  textvariable=self.min_delay_var).grid(row=0, column=2, sticky='w', padx=5)
+        tk.Label(api_grid, text="Mín:", bg=self.bg_color, font=('Segoe UI', 8)).grid(row=0, column=1, sticky='w')
+        tk.Spinbox(api_grid, from_=0.5, to=10.0, increment=0.5, width=5, 
+                  textvariable=self.min_delay_var).grid(row=0, column=2, sticky='w', padx=2)
         
-        tk.Label(api_frame, text="Máx:").grid(row=0, column=3, sticky='w', padx=(10,0))
-        tk.Spinbox(api_frame, from_=1.0, to=20.0, increment=0.5, width=8,
-                  textvariable=self.max_delay_var).grid(row=0, column=4, sticky='w', padx=5)
+        tk.Label(api_grid, text="Máx:", bg=self.bg_color, font=('Segoe UI', 8)).grid(row=0, column=3, sticky='w')
+        tk.Spinbox(api_grid, from_=1.0, to=20.0, increment=0.5, width=5,
+                  textvariable=self.max_delay_var).grid(row=0, column=4, sticky='w', padx=2)
         
-        # Tamaño de lote
-        tk.Label(api_frame, text="Tamaño de lote:").grid(row=1, column=0, sticky='w', pady=2)
+        # Tamaño de lote y delay
+        tk.Label(api_grid, text="Lote:", bg=self.bg_color, font=('Segoe UI', 9)).grid(row=1, column=0, sticky='w', pady=1)
         self.batch_size_var = tk.IntVar(value=5)
-        tk.Spinbox(api_frame, from_=1, to=20, width=8,
-                  textvariable=self.batch_size_var).grid(row=1, column=1, sticky='w', padx=5)
+        tk.Spinbox(api_grid, from_=1, to=20, width=5,
+                  textvariable=self.batch_size_var).grid(row=1, column=1, sticky='w', padx=2)
         
-        # Delay entre lotes
-        tk.Label(api_frame, text="Delay entre lotes (seg):").grid(row=1, column=2, sticky='w', padx=(10,0))
+        tk.Label(api_grid, text="Delay Lote:", bg=self.bg_color, font=('Segoe UI', 9)).grid(row=1, column=2, sticky='w', columnspan=2)
         self.batch_delay_var = tk.DoubleVar(value=10.0)
-        tk.Spinbox(api_frame, from_=5.0, to=60.0, increment=5.0, width=8,
-                  textvariable=self.batch_delay_var).grid(row=1, column=3, sticky='w', padx=5)
+        tk.Spinbox(api_grid, from_=5.0, to=60.0, increment=5.0, width=5,
+                  textvariable=self.batch_delay_var).grid(row=1, column=4, sticky='w', padx=2)
         
         # Límite de resultados
-        results_label_frame = tk.Frame(api_frame)
-        results_label_frame.grid(row=2, column=0, sticky='w', pady=2)
-
-        tk.Label(results_label_frame, text="Máx resultados:").pack(side='left')
-
-        # Botón de información
-        info_button = tk.Button(results_label_frame, text="ℹ️", font=('Arial', 8),
-                               command=self.show_60_limit_info, bg='#2196F3', fg='white',
-                               cursor='hand2', padx=2, pady=0, relief='flat')
-        info_button.pack(side='left', padx=5)
-
+        tk.Label(api_grid, text="Máx Res:", bg=self.bg_color, font=('Segoe UI', 9)).grid(row=2, column=0, sticky='w', pady=1)
         self.max_results_var = tk.StringVar(value="")
-        max_results_spinbox = tk.Spinbox(api_frame, from_=1, to=200, width=8,
-                                        textvariable=self.max_results_var)
-        max_results_spinbox.grid(row=2, column=1, sticky='w', padx=5)
-        tk.Label(api_frame, text="(vacío = todos)").grid(row=2, column=2, sticky='w', padx=5)
-
-        # Advertencia del límite de 60
-        warning_label = tk.Label(api_frame, text="⚠️ Límite: 60 resultados por palabra clave | 💡 Usa múltiples líneas para más resultados",
-                                fg='#FF9800', font=('Arial', 8))
-        warning_label.grid(row=3, column=0, columnspan=4, sticky='w', pady=(2, 5))
+        tk.Spinbox(api_grid, from_=1, to=200, width=5,
+                  textvariable=self.max_results_var).grid(row=2, column=1, sticky='w', padx=2)
+        
+        # Botón de información (compacto)
+        info_button = tk.Button(api_grid, text="ℹ️", font=('Segoe UI', 7),
+                               command=self.show_60_limit_info, bg=self.primary_color, fg='white',
+                               cursor='hand2', padx=3, pady=0, relief='flat')
+        info_button.grid(row=2, column=2, sticky='w', padx=2)
+        
+        # Advertencia del límite de 60 (más pequeña)
+        warning_label = tk.Label(api_frame, text="⚠️ Máx 60 resultados por keyword automática",
+                                fg='#FF9800', font=('Segoe UI', 8), bg=self.bg_color)
+        warning_label.pack(anchor='w', pady=(5, 0))
         
         # Botones de control
-        control_frame = tk.Frame(self.scraping_frame, bg='#f0f0f0')
+        control_frame = tk.Frame(self.scraping_frame, bg=self.bg_color)
         control_frame.pack(pady=10)
         
         self.start_button = tk.Button(control_frame, text="Iniciar Scraping", 
-                                     command=self.start_scraping, bg='#4CAF50', fg='white',
-                                     font=('Arial', 12, 'bold'), padx=20)
-        self.start_button.pack(side='left', padx=5)
+                                     command=self.start_scraping, bg=self.primary_color, fg='white',
+                                     font=('Segoe UI', 11, 'bold'), padx=20, cursor='hand2', relief='flat')
+        self.start_button.pack(side='left', padx=10)
         
         self.stop_button = tk.Button(control_frame, text="Detener", 
-                                    command=self.stop_scraping, bg='#f44336', fg='white',
-                                    font=('Arial', 12, 'bold'), padx=20, state='disabled')
-        self.stop_button.pack(side='left', padx=5)
+                                    command=self.stop_scraping, bg=self.danger_color, fg='white',
+                                    font=('Segoe UI', 11, 'bold'), padx=20, state='disabled', cursor='hand2', relief='flat')
+        self.stop_button.pack(side='left', padx=10)
         
         self.refresh_button = tk.Button(control_frame, text="Reiniciar", 
-                                       command=self.refresh_scraper, bg='#FF9800', fg='white',
-                                       font=('Arial', 12, 'bold'), padx=20)
-        self.refresh_button.pack(side='left', padx=5)
+                                       command=self.refresh_scraper, bg=self.warning_color, fg='white',
+                                       font=('Segoe UI', 11, 'bold'), padx=20, cursor='hand2', relief='flat')
+        self.refresh_button.pack(side='left', padx=10)
         
-        # Área de log
-        log_frame = ttk.LabelFrame(self.scraping_frame, text="Registro de Actividad", padding=5)
-        log_frame.pack(fill='both', expand=True, padx=10, pady=5)
-        
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=10, font=('Consolas', 9))
-        self.log_text.pack(fill='both', expand=True)
-        
-        # Barra de progreso
-        self.progress_var = tk.StringVar(value="Listo para comenzar")
-        progress_label = tk.Label(self.scraping_frame, textvariable=self.progress_var,
-                                 bg='#f0f0f0', font=('Arial', 10))
-        progress_label.pack(pady=5)
+        # Área de log y progreso combinada para visibilidad
+        bottom_frame = tk.Frame(self.scraping_frame, bg=self.bg_color)
+        bottom_frame.pack(fill='both', expand=True, padx=10, pady=5)
 
-        self.progress_bar = ttk.Progressbar(self.scraping_frame, mode='determinate')
-        self.progress_bar.pack(fill='x', padx=10, pady=5)
-
-        # Contador de API calls y costos
-        api_stats_frame = tk.Frame(self.scraping_frame, bg='#f0f0f0')
-        api_stats_frame.pack(pady=5)
-
+        # Contador de API calls y costos (posición mejorada)
         self.api_stats_var = tk.StringVar(value="API Calls: 0 | Costo estimado: $0.00")
-        api_stats_label = tk.Label(api_stats_frame, textvariable=self.api_stats_var,
-                                   bg='#f0f0f0', font=('Arial', 9), fg='#666666')
-        api_stats_label.pack()
+        api_stats_label = tk.Label(bottom_frame, textvariable=self.api_stats_var,
+                                   bg=self.bg_color, font=('Segoe UI', 9), fg='#666666')
+        api_stats_label.pack(anchor='e')
+
+        # Barra de progreso con etiqueta
+        progress_info_frame = tk.Frame(bottom_frame, bg=self.bg_color)
+        progress_info_frame.pack(fill='x', pady=(0, 5))
+
+        self.progress_var = tk.StringVar(value="Listo para comenzar")
+        progress_label = tk.Label(progress_info_frame, textvariable=self.progress_var,
+                                 bg=self.bg_color, font=('Segoe UI', 10, 'italic'))
+        progress_label.pack(side='left')
+
+        self.progress_bar = ttk.Progressbar(bottom_frame, mode='determinate')
+        self.progress_bar.pack(fill='x', pady=(0, 10))
+
+        # Área de log (EXPANDIDA)
+        log_frame = ttk.LabelFrame(bottom_frame, text="Registro de Actividad", padding=5)
+        log_frame.pack(fill='both', expand=True)
+        
+        self.log_text = scrolledtext.ScrolledText(log_frame, font=('Consolas', 9), bg='white', relief='flat')
+        self.log_text.pack(fill='both', expand=True)
         
     def setup_files_tab(self):
         # Título
-        title_label = tk.Label(self.files_frame, text="Gestión de Archivos JSON", 
-                              font=('Arial', 16, 'bold'), bg='#f0f0f0')
-        title_label.pack(pady=10)
+        title_label = tk.Label(self.files_frame, text="Gestión de Archivos Guardados", 
+                              font=('Segoe UI', 16, 'bold'), bg=self.bg_color, fg=self.primary_color)
+        title_label.pack(pady=15)
         
         # Frame para lista de archivos
         files_list_frame = ttk.LabelFrame(self.files_frame, text="Archivos JSON Existentes", padding=10)
@@ -444,20 +486,20 @@ class GoogleMyBusinessScraperGUI:
         self.files_listbox.bind('<Double-1>', self.view_json_file)
         
         # Botones para gestión de archivos
-        files_buttons_frame = tk.Frame(files_list_frame, bg='#f0f0f0')
+        files_buttons_frame = tk.Frame(files_list_frame, bg=self.bg_color)
         files_buttons_frame.pack(pady=10)
         
         tk.Button(files_buttons_frame, text="Actualizar Lista", command=self.refresh_json_files,
-                 bg='#2196F3', fg='white', padx=15).pack(side='left', padx=5)
+                 bg=self.primary_color, fg='white', padx=15, relief='flat', cursor='hand2').pack(side='left', padx=5)
         
         tk.Button(files_buttons_frame, text="Ver Contenido", command=self.view_selected_file,
-                 bg='#FF9800', fg='white', padx=15).pack(side='left', padx=5)
+                 bg=self.warning_color, fg='white', padx=15, relief='flat', cursor='hand2').pack(side='left', padx=5)
         
         tk.Button(files_buttons_frame, text="Eliminar Archivo", command=self.delete_selected_file,
-                 bg='#f44336', fg='white', padx=15).pack(side='left', padx=5)
+                 bg=self.danger_color, fg='white', padx=15, relief='flat', cursor='hand2').pack(side='left', padx=5)
         
         tk.Button(files_buttons_frame, text="Exportar", command=self.export_file,
-                 bg='#9C27B0', fg='white', padx=15).pack(side='left', padx=5)
+                 bg='#9C27B0', fg='white', padx=15, relief='flat', cursor='hand2').pack(side='left', padx=5)
         
         # Área de vista previa
         preview_frame = ttk.LabelFrame(self.files_frame, text="Vista Previa", padding=5)
@@ -468,20 +510,20 @@ class GoogleMyBusinessScraperGUI:
 
     def setup_config_tab(self):
         # Título
-        title_label = tk.Label(self.config_frame, text="Configuración de API Key",
-                              font=('Arial', 16, 'bold'), bg='#f0f0f0')
-        title_label.pack(pady=10)
+        title_label = tk.Label(self.config_frame, text="Configuración de Seguridad",
+                              font=('Segoe UI', 16, 'bold'), bg=self.bg_color, fg=self.primary_color)
+        title_label.pack(pady=15)
 
         # Frame para configuración de API
         api_config_frame = ttk.LabelFrame(self.config_frame, text="Google Places API Key", padding=20)
         api_config_frame.pack(fill='both', expand=True, padx=10, pady=5)
 
         # Estado actual de la API
-        status_frame = tk.Frame(api_config_frame, bg='white', relief='solid', bd=1)
+        status_frame = tk.Frame(api_config_frame, bg='white', relief='groove', bd=1)
         status_frame.pack(fill='x', pady=10)
 
-        tk.Label(status_frame, text="Estado:", font=('Arial', 11, 'bold'), bg='white').pack(side='left', padx=10, pady=10)
-        self.api_status_label = tk.Label(status_frame, text="No configurada", font=('Arial', 11), bg='white', fg='red')
+        tk.Label(status_frame, text="Estado:", font=('Segoe UI', 11, 'bold'), bg='white').pack(side='left', padx=10, pady=10)
+        self.api_status_label = tk.Label(status_frame, text="No configurada", font=('Segoe UI', 11), bg='white', fg=self.danger_color)
         self.api_status_label.pack(side='left', pady=10)
 
         # Instrucciones
@@ -497,7 +539,7 @@ Pasos para obtener tu API Key:
         """
 
         instructions_label = tk.Label(api_config_frame, text=instructions_text,
-                                     justify='left', font=('Arial', 9), bg='#f0f0f0')
+                                     justify='left', font=('Segoe UI', 9), bg=self.bg_color, fg=self.text_color)
         instructions_label.pack(pady=10, padx=5, anchor='w')
 
         # Entrada de API Key
@@ -513,17 +555,17 @@ Pasos para obtener tu API Key:
         show_api_check.pack(anchor='w', pady=5)
 
         # Botones de acción
-        buttons_frame = tk.Frame(api_config_frame, bg='#f0f0f0')
+        buttons_frame = tk.Frame(api_config_frame, bg=self.bg_color)
         buttons_frame.pack(pady=20)
 
         tk.Button(buttons_frame, text="Guardar API Key", command=self.save_api_key,
-                 bg='#4CAF50', fg='white', font=('Arial', 11, 'bold'), padx=20, pady=5).pack(side='left', padx=5)
+                 bg=self.primary_color, fg='white', font=('Segoe UI', 11, 'bold'), padx=20, pady=5, relief='flat', cursor='hand2').pack(side='left', padx=5)
 
         tk.Button(buttons_frame, text="Cargar desde archivo", command=self.load_api_from_file,
-                 bg='#2196F3', fg='white', font=('Arial', 11, 'bold'), padx=20, pady=5).pack(side='left', padx=5)
+                 bg=self.success_color, fg='white', font=('Segoe UI', 11, 'bold'), padx=20, pady=5, relief='flat', cursor='hand2').pack(side='left', padx=5)
 
         tk.Button(buttons_frame, text="Limpiar", command=self.clear_api_key,
-                 bg='#f44336', fg='white', font=('Arial', 11, 'bold'), padx=20, pady=5).pack(side='left', padx=5)
+                 bg=self.danger_color, fg='white', font=('Segoe UI', 11, 'bold'), padx=20, pady=5, relief='flat', cursor='hand2').pack(side='left', padx=5)
 
         # Actualizar el estado inicial
         self.update_api_status()

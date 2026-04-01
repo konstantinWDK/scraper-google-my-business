@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-# Google My Business Scraper v1.3.1
-# Cambios en v1.3.1:
-# - Organización de archivos en subcarpetas dentro de data/
-# - Mejora en la visualización de archivos en la GUI
+# Google My Business Scraper v1.3.2
+# Cambios en v1.3.2:
+# - Integración de extracción de imágenes de Google Places
+# - Opción para descargar imagen principal de cada negocio
+# - Organización automática de fotos en subcarpeta /images/
 #
+# Cambios en v1.3.1:
 # Cambios en v1.3.0:
 # - Búsquedas múltiples automáticas (campo multilínea)
 # - Superar límite de 60 resultados con múltiples keywords
@@ -40,6 +42,8 @@ import requests
 import time
 import random
 import re
+from io import BytesIO
+from PIL import Image
 import webbrowser
 from dataclasses import dataclass
 from typing import List, Optional, Dict
@@ -124,7 +128,8 @@ def setup_logging():
 DEFAULT_API_KEY_FILE = '.gmb_config.enc'  # Archivo cifrado
 URL_TEXT_SEARCH = 'https://maps.googleapis.com/maps/api/place/textsearch/json'
 URL_PLACE_DETAILS = 'https://maps.googleapis.com/maps/api/place/details/json'
-APP_VERSION = "1.3.1"
+URL_PLACE_PHOTO = 'https://maps.googleapis.com/maps/api/place/photo'
+APP_VERSION = "1.3.2"
 
 class SecureConfig:
     """Gestión segura de configuración con cifrado"""
@@ -205,6 +210,7 @@ class BusinessData:
     opening_hours: Optional[str] = None
     price_level: Optional[int] = None
     email: Optional[str] = None
+    image_path: Optional[str] = None
 
 class GoogleMyBusinessScraperGUI:
     def __init__(self, root):
@@ -336,7 +342,8 @@ class GoogleMyBusinessScraperGUI:
             'total_ratings': tk.BooleanVar(value=True),
             'opening_hours': tk.BooleanVar(value=False),
             'price_level': tk.BooleanVar(value=False),
-            'email': tk.BooleanVar(value=False)
+            'email': tk.BooleanVar(value=False),
+            'imagen': tk.BooleanVar(value=False)
         }
         
         field_labels = {
@@ -349,7 +356,8 @@ class GoogleMyBusinessScraperGUI:
             'total_ratings': 'Total Reseñas',
             'opening_hours': 'Horarios',
             'price_level': 'Precios',
-            'email': 'Email (@)'
+            'email': 'Email (@)',
+            'imagen': 'Imagen (GPlaces)'
         }
         
         field_grid = tk.Frame(fields_frame, bg=self.bg_color)
@@ -1417,6 +1425,58 @@ combinará los resultados sin duplicados.
             self.log(f"⚠️ Error obteniendo detalles para place_id '{place_id}': {e}")
             return None
             
+    def get_photo_references_by_title(self, title, max_photos=1):
+        """Busca referencias de fotos por título del negocio"""
+        params = {'query': title, 'key': self.api_key}
+        try:
+            resp = requests.get(URL_TEXT_SEARCH, params=params, timeout=10)
+            self.increment_api_calls()
+            resp.raise_for_status()
+            results = resp.json().get('results', [])
+        except Exception as e:
+            self.log(f"⚠️ Error buscando fotos para '{title}': {str(e)}")
+            return []
+
+        refs = []
+        for place in results:
+            for photo in place.get('photos', []):
+                ref = photo.get('photo_reference')
+                if ref:
+                    refs.append(ref)
+                    if len(refs) >= max_photos:
+                        return refs
+        return refs
+
+    def fetch_image_data(self, photo_ref):
+        """Descarga el contenido binario de una foto"""
+        params = {'photoreference': photo_ref, 'maxwidth': 1200, 'key': self.api_key}
+        try:
+            r = requests.get(URL_PLACE_PHOTO, params=params, timeout=15)
+            self.increment_api_calls()
+            r.raise_for_status()
+            return r.content
+        except Exception:
+            return None
+
+    def select_featured_image(self, refs):
+        """Selecciona la mejor imagen (preferiblemente apaisada)"""
+        if not refs: return None, None
+        
+        for ref in refs:
+            data = self.fetch_image_data(ref)
+            if data:
+                try:
+                    img = Image.open(BytesIO(data))
+                    w, h = img.size
+                    if w >= h: # Preferimos apaisadas
+                        return ref, data
+                except Exception:
+                    pass
+        
+        # Fallback a la primera si no hay apaisadas
+        ref = refs[0]
+        return ref, self.fetch_image_data(ref)
+
     def scrape_data(self, keywords, filename, output_format="json"):
         if isinstance(keywords, str):
             keywords = [keywords]  # Compatibilidad con llamadas antiguas
@@ -1520,6 +1580,33 @@ combinará los resultados sin duplicados.
             
             # Obtener detalles
             business_data = self.get_business_details(business['place_id'])
+            
+            # Extraer imagen si está habilitado
+            if business_data and self.field_vars['imagen'].get():
+                self.log(f"📸 Buscando imagen para: {business_data.title}...")
+                photo_refs = self.get_photo_references_by_title(business_data.title)
+                if photo_refs:
+                    ref, img_data = self.select_featured_image(photo_refs)
+                    if img_data:
+                        # Carpeta de imágenes dentro del directorio de la búsqueda
+                        folder = os.path.splitext(filename)[0]
+                        img_dir = os.path.join('data', folder, 'images')
+                        os.makedirs(img_dir, exist_ok=True)
+                        
+                        # Nombre de archivo normalizado
+                        safe_title = normalize_filename(business_data.title)
+                        img_filename = f"sitio_scrapeado_gmb_{safe_title}.jpg"
+                        img_path = os.path.join(img_dir, img_filename)
+                        
+                        with open(img_path, 'wb') as f:
+                            f.write(img_data)
+                        
+                        business_data.image_path = os.path.join('images', img_filename)
+                        self.log(f"   ✅ Imagen guardada")
+                    else:
+                        self.log(f"   ⚠️ No se pudo descargar")
+                else:
+                    self.log(f"   ❌ No se encontraron fotos")
             
             if business_data:
                 # Extraer email del sitio web si está habilitado

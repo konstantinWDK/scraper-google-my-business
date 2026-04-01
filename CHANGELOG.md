@@ -14,6 +14,29 @@ y este proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ---
 
+## [1.4.0] - 2025-01-XX
+
+### 🔧 Arreglado
+...
+
+---
+
+## [1.3.2] - 2026-04-01
+
+### 🆕 Añadido
+- **Extracción de imágenes de Google Places**
+  - Opción para descargar la imagen principal de cada negocio.
+  - Las imágenes se guardan en una subcarpeta `/images/` dentro del directorio de cada búsqueda.
+  - Formato de nombre: `sitio_scrapeado_gmb_<nombre>.jpg`.
+  - Integración con el sistema de costes y límites de la API.
+
+### ⚡ Mejorado
+- **Interfaz de Usuario**
+  - Añadida casilla "Imagen (GPlaces)" en la sección de selección de campos.
+  - Logs informativos detallados del progreso de descarga de imágenes.
+
+---
+
 ## [1.3.1] - 2026-04-01
 
 ### 🆕 Añadido

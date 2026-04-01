@@ -1,2 +1,0 @@
-# Dependencias necesarias para compilar la aplicación
-pyinstaller>=5.0.0

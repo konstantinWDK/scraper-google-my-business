@@ -5,13 +5,12 @@
 # ==========================================
 
 # Binarios compilados - Los usuarios compilan localmente
-compilado/
-dist/
-build/
-*.exe
-*.app
-*.dmg
 *.spec.backup
+
+# Carpetas de construcción por OS
+linux/
+windows/
+compilado/
 
 # Entorno virtual Python
 venv/

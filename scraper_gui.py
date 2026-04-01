@@ -1595,7 +1595,7 @@ combinará los resultados sin duplicados.
                         
                         # Nombre de archivo normalizado
                         safe_title = normalize_filename(business_data.title)
-                        img_filename = f"sitio_scrapeado_gmb_{safe_title}.jpg"
+                        img_filename = f"{safe_title}.jpg"
                         img_path = os.path.join(img_dir, img_filename)
                         
                         with open(img_path, 'wb') as f:
